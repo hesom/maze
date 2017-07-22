@@ -7,9 +7,10 @@
 #include "maze.h"
 
 Maze::Maze() :
-	_wantExit(false)
+	_wantExit(false),
+	_pause(false)
 {
-
+	_timer.start();
 }
 
 bool Maze::initProcess(QVRProcess* p)
@@ -81,6 +82,7 @@ bool Maze::initProcess(QVRProcess* p)
 	_prg.addShaderFromSourceFile(QOpenGLShader::Vertex, ":vertexshader.glsl");
 	_prg.addShaderFromSourceFile(QOpenGLShader::Fragment, ":fragmentshader.glsl");
 	_prg.link();
+
 	return true;
 }
 
@@ -124,7 +126,19 @@ void Maze::render(QVRWindow* w,
 
 void Maze::update(const QList<QVRObserver*>& observers)
 {
-	
+	if (_pause) {
+		if (_timer.isValid()) {
+			_elapsedTime += _timer.elapsed();
+			_timer.invalidate();
+		}
+		else {
+			if (!_timer.isValid()) {
+				_timer.start();
+			}
+			float seconds = (_elapsedTime + _timer.elapsed()) / 1000.0f;
+			//Animation here
+		}
+	}
 }
 
 bool Maze::wantExit()
