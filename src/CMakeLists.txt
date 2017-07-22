@@ -9,6 +9,7 @@ add_executable(maze
   maze.cpp maze.h
   mesh.cpp mesh.h
   entity.cpp entity.h
+  cell.cpp cell.h
 )
 set_target_properties(maze PROPERTIES
   CXX_STANDARD 11
