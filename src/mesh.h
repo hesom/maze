@@ -13,7 +13,7 @@ struct Vertex
 	
 };
 
-class Mesh : QOpenGLFunctions_3_3_Core
+class Mesh : protected QOpenGLFunctions_3_3_Core
 {
 private:
 	std::vector<Vertex> _vertices;
@@ -25,6 +25,7 @@ private:
 	void setupMesh();
 public:
 	Mesh(std::vector<Vertex> vertices, std::vector<unsigned int> indices);
+	~Mesh();
 	void draw();
 
 	static std::shared_ptr<Mesh> cubeMesh();

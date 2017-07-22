@@ -18,12 +18,15 @@ private:
 	bool _wantExit;             // do we want to exit the app?
 	bool _pause;                // are we in pause mode?
 	qint64 _elapsedTime;        // used for rotating the box
+
 	QElapsedTimer _timer;
 	GLuint _fbo;
 	GLuint _fboDepthTex;
 
 	std::shared_ptr<Mesh> _cube;
-	std::vector<Cell> cells;
+	std::vector<Cell> _cells;
+
+	QVector3D _oldPos;
 
 	QOpenGLShaderProgram _prg;
 protected:

@@ -10,6 +10,10 @@ Mesh::Mesh(std::vector<Vertex> vertices, std::vector<unsigned int> indices)
 	setupMesh();
 }
 
+Mesh::~Mesh()
+{
+}
+
 void Mesh::setupMesh()
 {
 	glGenVertexArrays(1, &_vao);

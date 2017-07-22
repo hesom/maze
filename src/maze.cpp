@@ -12,6 +12,7 @@ Maze::Maze() :
 	_pause(false)
 {
 	_timer.start();
+	_oldPos = QVector3D(0.0f, 0.0f, 0.0f);
 }
 
 bool Maze::initProcess(QVRProcess* p)
@@ -23,7 +24,12 @@ bool Maze::initProcess(QVRProcess* p)
 	auto cube = Mesh::cubeMesh();
 
 	Cell cell;
-
+	/*Entity e(cube, QVector3D(1.0f, 0.0f, 0.0f), QVector3D(0.0f, 0.0f, -10.0f), 0.1f);
+	cell.addEntity(e);*/
+	cell.buildWall(cube, QVector3D(0.0f, 0.0f, -10.0f), QVector3D(1.0f, 0.0f, 0.0f), 10, true);
+	cell.buildWall(cube, QVector3D(0.0f, 0.0f, -15.0f), QVector3D(1.0f, 0.0f, 0.0f), 10, false);
+	_cells.push_back(cell);
+	cell.~Cell();
 	glGenFramebuffers(1, &_fbo);
 	glBindFramebuffer(GL_FRAMEBUFFER, _fbo);
 	glGenTextures(1, &_fboDepthTex);
@@ -68,26 +74,9 @@ void Maze::render(QVRWindow* w,
 	glEnable(GL_CULL_FACE);
 	glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 
-	QVector3D color = QVector3D(1.0f, 0.0f, 0.0f);
-	_prg.setUniformValue("color", color);
-
-	QMatrix4x4 modelMatrix;
-	modelMatrix.translate(0.0f, 0.0f, -10.0f);
-	modelMatrix.scale(0.1f);
-	modelMatrix.translate(0.0f, 0.5f, 0.0f);
-	QMatrix4x4 modelViewMatrix = viewMatrix * modelMatrix;
-	_prg.setUniformValue("modelview_matrix", modelViewMatrix);
-	_prg.setUniformValue("normal_matrix", modelViewMatrix.normalMatrix());
-	_cube->draw();
-
-	modelMatrix.setToIdentity();
-	modelMatrix.translate(0.0f, 0.1f, -10.0f);
-	modelMatrix.scale(0.1f);
-	modelMatrix.translate(0.0f, 0.5f, 0.0f);
-	modelViewMatrix = viewMatrix * modelMatrix;
-	_prg.setUniformValue("modelview_matrix", modelViewMatrix);
-	_prg.setUniformValue("normal_matrix", modelViewMatrix.normalMatrix());
-	_cube->draw();
+	for (auto cell : _cells) {
+		cell.draw(_prg, viewMatrix);
+	}
 }
 
 void Maze::update(const QList<QVRObserver*>& observers)
@@ -106,10 +95,22 @@ void Maze::update(const QList<QVRObserver*>& observers)
 		}
 	}
 	for (auto obs : observers) {
-		QVector3D pos = obs->navigationPosition();
+		auto pos = obs->navigationPosition();
+		for (auto cell : _cells) {
+			for (auto entity : cell.getEntities()) {
+				auto objectPos = entity.getPosition();
+				auto dist = pos.distanceToPoint(objectPos);
+				if (dist < 1) {
+					obs->setNavigation(_oldPos, obs->navigationOrientation());
+					std::cout << "Collision" << std::endl;
+					pos = _oldPos;
+				}
+			}
+		}
+		_oldPos = pos;
 		QVector3D eye = obs->trackingPosition();
-		std::cout << "Nav: (" << pos.x() << "," << pos.y() <<"," << pos.z() << ")"<< std::endl;
-		std::cout << "Tracking: (" << eye.x() << "," << eye.y() << "," << eye.z() << ")" << std::endl;
+		//std::cout << "Nav: (" << pos.x() << "," << pos.y() <<"," << pos.z() << ")"<< std::endl;
+		//std::cout << "Tracking: (" << eye.x() << "," << eye.y() << "," << eye.z() << ")" << std::endl;
 	}
 }
 
@@ -130,6 +131,7 @@ void Maze::deserializeDynamicData(QDataStream& ds)
 
 void Maze::keyPressEvent(const QVRRenderContext& context, QKeyEvent* event)
 {
+
 	switch (event->key())
 	{
 	case Qt::Key_Escape:
@@ -137,6 +139,7 @@ void Maze::keyPressEvent(const QVRRenderContext& context, QKeyEvent* event)
 		break;
 	}
 }
+
 int main(int argc, char* argv[])
 {
 	QApplication app(argc, argv);
