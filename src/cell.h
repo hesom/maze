@@ -25,6 +25,11 @@ private:
 
 public:
 	Cell();
+	void addEntity(Entity e);
+	void addPortal(Portal p);
+
+	std::vector<Entity> getEntities();
+	std::vector<Portal> getPortals();
 };
 
 #endif // MAZE_CELL_H

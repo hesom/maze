@@ -20,6 +20,10 @@ bool Maze::initProcess(QVRProcess* p)
 
 	_cube = Mesh::cubeMesh();
 
+	auto cube = Mesh::cubeMesh();
+
+	Cell cell;
+
 	glGenFramebuffers(1, &_fbo);
 	glBindFramebuffer(GL_FRAMEBUFFER, _fbo);
 	glGenTextures(1, &_fboDepthTex);

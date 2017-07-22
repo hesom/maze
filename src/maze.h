@@ -9,6 +9,8 @@
 #include <qvr/app.hpp>
 
 #include "mesh.h"
+#include "entity.h"
+#include "cell.h"
 
 class Maze : public QVRApp, protected QOpenGLFunctions_3_3_Core
 {
@@ -21,6 +23,7 @@ private:
 	GLuint _fboDepthTex;
 
 	std::shared_ptr<Mesh> _cube;
+	std::vector<Cell> cells;
 
 	QOpenGLShaderProgram _prg;
 protected:
