@@ -7,6 +7,7 @@ qt5_add_resources(RESOURCES resources.qrc)
 
 add_executable(maze
   maze.cpp maze.h
+  mesh.cpp mesh.h
 )
 set_target_properties(maze PROPERTIES
   CXX_STANDARD 11
