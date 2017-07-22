@@ -17,6 +17,8 @@ private:
 	bool _pause;                // are we in pause mode?
 	qint64 _elapsedTime;        // used for rotating the box
 	QElapsedTimer _timer;
+	GLuint _fbo;
+	GLuint _fboDepthTex;
 
 	std::shared_ptr<Mesh> _cube;
 

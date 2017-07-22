@@ -10,6 +10,7 @@ add_executable(maze
   mesh.cpp mesh.h
   entity.cpp entity.h
   cell.cpp cell.h
+  ${RESOURCES}
 )
 set_target_properties(maze PROPERTIES
   CXX_STANDARD 11
