@@ -15,10 +15,10 @@ private:
 	QVector3D _position;
 	QVector3D _scale;
 	QVector3D _rotation;
-
+	QVector3D _color;
 public:
-	Entity(std::shared_ptr<Mesh> mesh,  QVector3D position, QVector3D scale, QVector3D rotation);
-	Entity(std::shared_ptr<Mesh> mesh, QVector3D position, float scale, QVector3D rotation);
+	Entity(std::shared_ptr<Mesh> mesh, QVector3D color,  QVector3D position, QVector3D scale, QVector3D rotation);
+	Entity(std::shared_ptr<Mesh> mesh, QVector3D color, QVector3D position, float scale, QVector3D rotation);
 };
 
 #endif // MAZE_OBJECT_H

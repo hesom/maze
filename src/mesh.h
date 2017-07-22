@@ -9,7 +9,7 @@ struct Vertex
 {
 	QVector3D position;
 	QVector3D normal;
-	QVector3D color;
+	
 };
 
 class Mesh : QOpenGLFunctions_3_3_Core

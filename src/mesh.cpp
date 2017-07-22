@@ -3,6 +3,7 @@
 
 Mesh::Mesh(std::vector<Vertex> vertices, std::vector<unsigned int> indices)
 {
+	initializeOpenGLFunctions();
 	this->_vertices = vertices;
 	this->_indices = indices;
 	setupMesh();
@@ -27,9 +28,6 @@ void Mesh::setupMesh()
 
 	glEnableVertexAttribArray(1);
 	glVertexAttribPointer(1, 3, GL_FLOAT, GL_TRUE, sizeof(Vertex), (void*)offsetof(Vertex, normal));
-
-	glEnableVertexAttribArray(2);
-	glVertexAttribPointer(2, 3, GL_FLOAT, GL_TRUE, sizeof(Vertex), (void*)offsetof(Vertex, color));
 
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
