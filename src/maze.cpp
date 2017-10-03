@@ -28,6 +28,7 @@ bool Maze::initProcess(QVRProcess* p)
 	cell.addEntity(e);*/
 	cell.buildWall(cube, QVector3D(0.0f, 0.0f, -10.0f), QVector3D(1.0f, 0.0f, 0.0f), 10, true);
 	cell.buildWall(cube, QVector3D(0.0f, 0.0f, -15.0f), QVector3D(1.0f, 0.0f, 0.0f), 10, false);
+	cell.buildWall(cube, QVector3D(0.0f, 0.0f, -15.0f), QVector3D(1.0f, 0.0f, 0.0f), 10, true);
 	_cells.push_back(cell);
 	cell.~Cell();
 	glGenFramebuffers(1, &_fbo);
