@@ -114,6 +114,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="App.cpp" />
+    <ClCompile Include="glad.c" />
   </ItemGroup>
   <ItemGroup>
     <QtRcc Include="maze.qrc" />

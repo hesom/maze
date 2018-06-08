@@ -25,6 +25,7 @@
 #include <QKeyEvent>
 
 #include <qvr/manager.hpp>
+#include <glad/glad.h>
 
 #include "App.hpp"
 
@@ -36,10 +37,14 @@ QVRExampleOpenGLMinimal::QVRExampleOpenGLMinimal() :
     _timer.start();
 }
 
-bool QVRExampleOpenGLMinimal::initProcess(QVRProcess* /* p */)
+bool QVRExampleOpenGLMinimal::initProcess(QVRProcess* p)
 {
+    qDebug() << "GL init";
+    if (!gladLoadGL()) {
+        qCritical("Could not load GL functions with glad");
+    }
     // Qt-based OpenGL function pointers
-    initializeOpenGLFunctions();
+    //initializeOpenGLFunctions();
 
     // Framebuffer object
     glGenFramebuffers(1, &_fbo);
@@ -174,10 +179,10 @@ int main(int argc, char* argv[])
     QVRManager manager(argc, argv);
 
     /* First set the default surface format that all windows will use */
-    QSurfaceFormat format;
+    /*QSurfaceFormat format;
     format.setProfile(QSurfaceFormat::CoreProfile);
     format.setVersion(4, 6);
-    QSurfaceFormat::setDefaultFormat(format);
+    QSurfaceFormat::setDefaultFormat(format);*/
 
     /* Then start QVR with the app */
     QVRExampleOpenGLMinimal qvrapp;
