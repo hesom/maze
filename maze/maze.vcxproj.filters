@@ -32,6 +32,9 @@
     <None Include="fragment-shader.glsl">
       <Filter>Resource Files</Filter>
     </None>
+    <None Include="config.qvr">
+      <Filter>Resource Files</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <QtRcc Include="maze.qrc">

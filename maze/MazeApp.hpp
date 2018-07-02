@@ -30,8 +30,13 @@
 #include <qvr/app.hpp>
 #include <qvr/device.hpp>
 
-#define STB_IMAGE_IMPLEMENTATION
-#include "stb_image.h"
+enum class GridCell : int
+{
+    EMPTY,
+    WALL,
+    FINISH,
+    SPAWN
+};
 
 class MazeApp : public QVRApp
 {
@@ -46,6 +51,9 @@ private:
     unsigned int _vao;          // Vertex array object for the box
     unsigned int _vaoIndices;   // Number of indices to render for the box
     QOpenGLShaderProgram _prg;  // Shader program for rendering
+    GridCell* mazeGrid;    // 0 = nothing, 1 = wall, 2 = finish, (3 = spawn)
+    size_t gridWidth;
+    size_t gridHeight;
 
     /* Dynamic data for rendering. Needs to be serialized. */
     float _rotationAngle;       // animated box rotation
@@ -53,6 +61,7 @@ private:
 public:
     MazeApp();
 
+    // override functions 
     bool initProcess(QVRProcess* p) override;
 
     void render(QVRWindow* w, const QVRRenderContext& c, const unsigned int* textures) override;
@@ -65,6 +74,15 @@ public:
     void deserializeDynamicData(QDataStream& ds) override;
 
     void keyPressEvent(const QVRRenderContext& context, QKeyEvent* event) override;
+
+    void exitProcess(QVRProcess* p) override;
+
+
+    // custom functions
+    GridCell GetCell(int row, int col)
+    {
+        return mazeGrid[row * gridWidth + col];
+    }
 };
 
 #endif

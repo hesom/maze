@@ -20,12 +20,17 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
+#include <iostream>
 
 #include <QGuiApplication>
 #include <QKeyEvent>
+#include <QMessageBox>
 
 #include <qvr/manager.hpp>
 #include <glad/glad.h>
+
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
 
 #include "MazeApp.hpp"
 
@@ -42,6 +47,35 @@ bool MazeApp::initProcess(QVRProcess* p)
     if (!gladLoadGL()) {
         qCritical("Could not load GL functions with glad");
     }
+
+    int mazeWidth, mazeHeight, channels;
+    // load maze layout
+    unsigned char* mazeImage = stbi_load("maze.bmp", &mazeWidth, &mazeHeight, &channels, 0);
+    if (!mazeImage) {
+        qCritical("Could not load maze layout");
+    }
+    mazeGrid = new GridCell[mazeWidth * mazeHeight];
+    gridHeight = mazeHeight;
+    gridWidth = mazeWidth;
+    for (int cell = 0; cell < gridHeight * gridWidth; cell++) {
+        // map bmp color to cell type
+        // white => empty, red => wall, green => finish, black => spawn
+        bool red, green, blue;
+        red = mazeImage[channels*cell + 0];
+        green = mazeImage[channels * cell + 1];
+        blue = mazeImage[channels * cell + 2];
+
+        if (red && green && blue) {
+            mazeGrid[cell] = GridCell::EMPTY;
+        } else if (red && !green && !blue) {
+            mazeGrid[cell] = GridCell::WALL;
+        } else if (!red && green && !blue) {
+            mazeGrid[cell] = GridCell::FINISH;
+        } else if (!red && !green && !blue) {
+            mazeGrid[cell] = GridCell::SPAWN;
+        }
+    }
+    stbi_image_free(mazeImage);
 
     // Framebuffer object
     glGenFramebuffers(1, &_fbo);
@@ -168,6 +202,11 @@ void MazeApp::keyPressEvent(const QVRRenderContext& /* context */, QKeyEvent* ev
         _wantExit = true;
         break;
     }
+}
+
+void MazeApp::exitProcess(QVRProcess* process)
+{
+    delete[] mazeGrid;
 }
 
 int main(int argc, char* argv[])
