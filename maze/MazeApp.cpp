@@ -27,24 +27,21 @@
 #include <qvr/manager.hpp>
 #include <glad/glad.h>
 
-#include "App.hpp"
+#include "MazeApp.hpp"
 
 
-QVRExampleOpenGLMinimal::QVRExampleOpenGLMinimal() :
+MazeApp::MazeApp() :
     _wantExit(false),
     _rotationAngle(0.0f)
 {
     _timer.start();
 }
 
-bool QVRExampleOpenGLMinimal::initProcess(QVRProcess* p)
+bool MazeApp::initProcess(QVRProcess* p)
 {
-    qDebug() << "GL init";
     if (!gladLoadGL()) {
         qCritical("Could not load GL functions with glad");
     }
-    // Qt-based OpenGL function pointers
-    //initializeOpenGLFunctions();
 
     // Framebuffer object
     glGenFramebuffers(1, &_fbo);
@@ -108,7 +105,7 @@ bool QVRExampleOpenGLMinimal::initProcess(QVRProcess* p)
     return true;
 }
 
-void QVRExampleOpenGLMinimal::render(QVRWindow* /* w */,
+void MazeApp::render(QVRWindow* /* w */,
         const QVRRenderContext& context, const unsigned int* textures)
 {
     for (int view = 0; view < context.viewCount(); view++) {
@@ -142,28 +139,28 @@ void QVRExampleOpenGLMinimal::render(QVRWindow* /* w */,
     }
 }
 
-void QVRExampleOpenGLMinimal::update(const QList<QVRObserver*>&)
+void MazeApp::update(const QList<QVRObserver*>& observers)
 {
     float seconds = _timer.elapsed() / 1000.0f;
     _rotationAngle = seconds * 20.0f;
 }
 
-bool QVRExampleOpenGLMinimal::wantExit()
+bool MazeApp::wantExit()
 {
     return _wantExit;
 }
 
-void QVRExampleOpenGLMinimal::serializeDynamicData(QDataStream& ds) const
+void MazeApp::serializeDynamicData(QDataStream& ds) const
 {
     ds << _rotationAngle;
 }
 
-void QVRExampleOpenGLMinimal::deserializeDynamicData(QDataStream& ds)
+void MazeApp::deserializeDynamicData(QDataStream& ds)
 {
     ds >> _rotationAngle;
 }
 
-void QVRExampleOpenGLMinimal::keyPressEvent(const QVRRenderContext& /* context */, QKeyEvent* event)
+void MazeApp::keyPressEvent(const QVRRenderContext& /* context */, QKeyEvent* event)
 {
     switch (event->key())
     {
@@ -178,14 +175,8 @@ int main(int argc, char* argv[])
     QGuiApplication app(argc, argv);
     QVRManager manager(argc, argv);
 
-    /* First set the default surface format that all windows will use */
-    /*QSurfaceFormat format;
-    format.setProfile(QSurfaceFormat::CoreProfile);
-    format.setVersion(4, 6);
-    QSurfaceFormat::setDefaultFormat(format);*/
-
     /* Then start QVR with the app */
-    QVRExampleOpenGLMinimal qvrapp;
+    MazeApp qvrapp;
     if (!manager.init(&qvrapp)) {
         qCritical("Cannot initialize QVR manager");
         return 1;

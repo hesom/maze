@@ -3,5 +3,6 @@
         <file>vertex-shader.glsl</file>
         <file>fragment-shader.glsl</file>
         <file>config.qvr</file>
+        <file>maze.bmp</file>
     </qresource>
 </RCC>

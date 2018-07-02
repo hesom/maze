@@ -113,7 +113,7 @@
     </QtRcc>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="App.cpp" />
+    <ClCompile Include="MazeApp.cpp" />
     <ClCompile Include="glad.c" />
   </ItemGroup>
   <ItemGroup>
@@ -130,7 +130,11 @@
     </None>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="App.hpp" />
+    <ClInclude Include="MazeApp.hpp" />
+    <ClInclude Include="stb_image.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="maze.bmp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Condition="Exists('$(QtMsBuild)\qt.targets')">

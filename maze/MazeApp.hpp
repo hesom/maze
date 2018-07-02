@@ -24,13 +24,16 @@
 #ifndef QVR_EXAMPLE_OPENGL_MINIMAL_HPP
 #define QVR_EXAMPLE_OPENGL_MINIMAL_HPP
 
-//#include <QOpenGLExtraFunctions>
 #include <QOpenGLShaderProgram>
 #include <QElapsedTimer>
 
 #include <qvr/app.hpp>
+#include <qvr/device.hpp>
 
-class QVRExampleOpenGLMinimal : public QVRApp
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
+
+class MazeApp : public QVRApp
 {
 private:
     /* Data not directly relevant for rendering */
@@ -48,7 +51,7 @@ private:
     float _rotationAngle;       // animated box rotation
 
 public:
-    QVRExampleOpenGLMinimal();
+    MazeApp();
 
     bool initProcess(QVRProcess* p) override;
 
