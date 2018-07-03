@@ -224,7 +224,7 @@ void MazeApp::render(QVRWindow* /* w */,
                     _prg.setUniformValue("modelview_matrix", modelViewMatrix);
                     _prg.setUniformValue("view_matrix", viewMatrix);
                     _prg.setUniformValue("normal_matrix", modelViewMatrix.normalMatrix());
-                    _prg.setUniformValue("color", QVector3D(1.0f, 1.0f, 1.0f));
+                    _prg.setUniformValue("color", QVector3D(0.5f, 0.5f, 0.5f));
                     glBindVertexArray(_vaoFloor);
                     glDrawElements(GL_TRIANGLES, _vaoIndicesFloor, GL_UNSIGNED_INT, 0);
                 } else if (cell == GridCell::FINISH) {
@@ -238,6 +238,19 @@ void MazeApp::render(QVRWindow* /* w */,
                     _prg.setUniformValue("view_matrix", viewMatrix);
                     _prg.setUniformValue("normal_matrix", modelViewMatrix.normalMatrix());
                     _prg.setUniformValue("color", QVector3D(0.0f, 1.0f, 0.0f));
+                    glBindVertexArray(_vaoFloor);
+                    glDrawElements(GL_TRIANGLES, _vaoIndicesFloor, GL_UNSIGNED_INT, 0);
+                } else if (cell == GridCell::SPAWN) {
+                    float x = -((float)gridWidth) + 2.0f * col;
+                    float y = ((float)gridHeight) - 2.0f * row;
+                    QMatrix4x4 modelMatrix;
+                    modelMatrix.translate(x, 1.0f, y);
+                    //modelMatrix.rotate(_rotationAngle, 1.0f, 0.5f, 0.0f);
+                    QMatrix4x4 modelViewMatrix = viewMatrix * modelMatrix;
+                    _prg.setUniformValue("modelview_matrix", modelViewMatrix);
+                    _prg.setUniformValue("view_matrix", viewMatrix);
+                    _prg.setUniformValue("normal_matrix", modelViewMatrix.normalMatrix());
+                    _prg.setUniformValue("color", QVector3D(0.7f, 0.7f, 0.0f));
                     glBindVertexArray(_vaoFloor);
                     glDrawElements(GL_TRIANGLES, _vaoIndicesFloor, GL_UNSIGNED_INT, 0);
                 }

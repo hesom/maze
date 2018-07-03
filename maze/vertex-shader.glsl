@@ -35,7 +35,7 @@ out vec3 vnormal;
 out vec3 vview;
 out vec3 vlight;
 
-const vec4 wlight = vec4(-10.0, -30.0, -10.0, 1.0);
+const vec4 wlight = vec4(-10.0, -30.0, -20.0, 1.0);
 
 void main(void)
 {

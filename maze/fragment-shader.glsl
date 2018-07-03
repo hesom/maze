@@ -31,8 +31,8 @@ in vec3 vlight;
 
 layout(location = 0) out vec4 fcolor;
 
-const float kd = 0.5;
-const float ks = 0.5;
+const float kd = 0.9;
+const float ks = 0.01;
 const float shininess = 120.0;
 
 void main(void)
