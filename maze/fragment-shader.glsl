@@ -38,14 +38,14 @@ const float shininess = 120.0;
 void main(void)
 {
     vec3 n = normalize(vnormal);
-    vec3 v = -normalize(vview);
+    vec3 v = normalize(vview);
     vec3 l = normalize(vlight);
 
     vec3 h = normalize(l + v);
 
     float diffuse = kd * max(dot(l, n), 0.0);
 
-    float specular = clamp(ks * pow(max(dot(h, n), 0.0), shininess), 0.0, 1.0);
+    float specular = ks * pow(max(dot(h, n), 0.0), shininess);
 
     fcolor = vec4(color * vec3(0.2 + diffuse + specular), 1.0);
 }

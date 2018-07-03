@@ -42,6 +42,6 @@ void main(void)
     vec4 position = vec4(pos, 1.0);
     vnormal = normal_matrix * normal;
     vview = -(modelview_matrix * position).xyz;
-    vlight = -(view_matrix * wlight).xyz; // light is always at camera pos
+    vlight = -(view_matrix * wlight).xyz;
     gl_Position = projection_matrix * modelview_matrix * position;
 }
