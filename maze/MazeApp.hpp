@@ -48,8 +48,10 @@ private:
     /* Static data for rendering, initialized per process. */
     unsigned int _fbo;          // Framebuffer object to render into
     unsigned int _fboDepthTex;  // Depth attachment for the FBO
-    unsigned int _vao;          // Vertex array object for the box
-    unsigned int _vaoIndices;   // Number of indices to render for the box
+    unsigned int _vaoWall;          // Vertex array object for the box
+    unsigned int _vaoIndicesWall;   // Number of indices to render for the box
+    unsigned int _vaoFloor;
+    unsigned int _vaoIndicesFloor;
     QOpenGLShaderProgram _prg;  // Shader program for rendering
     GridCell* mazeGrid;    // 0 = nothing, 1 = wall, 2 = finish, (3 = spawn)
     size_t gridWidth;

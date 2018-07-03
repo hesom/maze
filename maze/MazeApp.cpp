@@ -113,8 +113,20 @@ bool MazeApp::initProcess(QVRProcess* p)
         16, 17, 19, 17, 18, 19, // top face
         20, 23, 21, 21, 23, 22, // bottom face
     };
-    glGenVertexArrays(1, &_vao);
-    glBindVertexArray(_vao);
+
+    static const GLfloat floorVertices[] = {
+        -1.0f, -1.0f, +1.0f,   +1.0f, -1.0f, +1.0f,   +1.0f, -1.0f, -1.0f,   -1.0f, -1.0f, -1.0f  // bottom
+    };
+    static const GLfloat floorNormals[] = {
+        0.0f, 1.0f, 0.0f,   0.0f, 1.0f, 0.0f,   0.0f, 1.0f, 0.0f,   0.0f, 1.0f, 0.0f  // bottom
+    };
+    static const GLuint floorIndices[] = {
+        0, 3, 1, 1, 3, 2 // front face
+    };
+
+
+    glGenVertexArrays(1, &_vaoWall);
+    glBindVertexArray(_vaoWall);
     GLuint positionBuf;
     glGenBuffers(1, &positionBuf);
     glBindBuffer(GL_ARRAY_BUFFER, positionBuf);
@@ -131,7 +143,27 @@ bool MazeApp::initProcess(QVRProcess* p)
     glGenBuffers(1, &indexBuf);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBuf);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(wallIndices), wallIndices, GL_STATIC_DRAW);
-    _vaoIndices = 36;
+    _vaoIndicesWall = 36;
+
+    glGenVertexArrays(1, &_vaoFloor);
+    glBindVertexArray(_vaoFloor);
+    GLuint positionBufFloor;
+    glGenBuffers(1, &positionBufFloor);
+    glBindBuffer(GL_ARRAY_BUFFER, positionBufFloor);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(floorVertices), floorVertices, GL_STATIC_DRAW);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, 0);
+    glEnableVertexAttribArray(0);
+    GLuint normalBufFloor;
+    glGenBuffers(1, &normalBufFloor);
+    glBindBuffer(GL_ARRAY_BUFFER, normalBufFloor);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(floorNormals), floorNormals, GL_STATIC_DRAW);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_TRUE, 0, 0);
+    glEnableVertexAttribArray(1);
+    GLuint indexBufFloor;
+    glGenBuffers(1, &indexBuf);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBufFloor);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(floorIndices), floorIndices, GL_STATIC_DRAW);
+    _vaoIndicesFloor = 6;
 
     // Shader program
     _prg.addShaderFromSourceFile(QOpenGLShader::Vertex, ":vertex-shader.glsl");
@@ -166,7 +198,52 @@ void MazeApp::render(QVRWindow* /* w */,
         _prg.setUniformValue("projection_matrix", projectionMatrix);
         glEnable(GL_DEPTH_TEST);
         // Render
-        QMatrix4x4 modelMatrix;
+        for (int col = 0; col < gridWidth; col++) {
+            for (int row = 0; row < gridHeight; row++) {
+                auto cell = GetCell(col, row);
+                if (cell == GridCell::WALL) {
+                    float x = -((float)gridWidth) + 2.0f * col;
+                    float y = ((float)gridHeight) - 2.0f * row;
+                    QMatrix4x4 modelMatrix;
+                    modelMatrix.translate(x, 1.0f, y);
+                    //modelMatrix.rotate(_rotationAngle, 1.0f, 0.5f, 0.0f);
+                    QMatrix4x4 modelViewMatrix = viewMatrix * modelMatrix;
+                    _prg.setUniformValue("modelview_matrix", modelViewMatrix);
+                    _prg.setUniformValue("view_matrix", viewMatrix);
+                    _prg.setUniformValue("normal_matrix", modelViewMatrix.normalMatrix());
+                    _prg.setUniformValue("color", QVector3D(1.0f, 0.0f, 0.0f));
+                    glBindVertexArray(_vaoWall);
+                    glDrawElements(GL_TRIANGLES, _vaoIndicesWall, GL_UNSIGNED_INT, 0);
+                } else if (cell == GridCell::EMPTY) {
+                    float x = -((float)gridWidth) + 2.0f * col;
+                    float y = ((float)gridHeight) - 2.0f * row;
+                    QMatrix4x4 modelMatrix;
+                    modelMatrix.translate(x, 1.0f, y);
+                    //modelMatrix.rotate(_rotationAngle, 1.0f, 0.5f, 0.0f);
+                    QMatrix4x4 modelViewMatrix = viewMatrix * modelMatrix;
+                    _prg.setUniformValue("modelview_matrix", modelViewMatrix);
+                    _prg.setUniformValue("view_matrix", viewMatrix);
+                    _prg.setUniformValue("normal_matrix", modelViewMatrix.normalMatrix());
+                    _prg.setUniformValue("color", QVector3D(1.0f, 1.0f, 1.0f));
+                    glBindVertexArray(_vaoFloor);
+                    glDrawElements(GL_TRIANGLES, _vaoIndicesFloor, GL_UNSIGNED_INT, 0);
+                } else if (cell == GridCell::FINISH) {
+                    float x = -((float)gridWidth) + 2.0f * col;
+                    float y = ((float)gridHeight) - 2.0f * row;
+                    QMatrix4x4 modelMatrix;
+                    modelMatrix.translate(x, 1.0f, y);
+                    //modelMatrix.rotate(_rotationAngle, 1.0f, 0.5f, 0.0f);
+                    QMatrix4x4 modelViewMatrix = viewMatrix * modelMatrix;
+                    _prg.setUniformValue("modelview_matrix", modelViewMatrix);
+                    _prg.setUniformValue("view_matrix", viewMatrix);
+                    _prg.setUniformValue("normal_matrix", modelViewMatrix.normalMatrix());
+                    _prg.setUniformValue("color", QVector3D(0.0f, 1.0f, 0.0f));
+                    glBindVertexArray(_vaoFloor);
+                    glDrawElements(GL_TRIANGLES, _vaoIndicesFloor, GL_UNSIGNED_INT, 0);
+                }
+            }
+        }
+        /*QMatrix4x4 modelMatrix;
         modelMatrix.translate(0.0f, 0.0f, -15.0f);
         modelMatrix.rotate(_rotationAngle, 1.0f, 0.5f, 0.0f);
         QMatrix4x4 modelViewMatrix = viewMatrix * modelMatrix;
@@ -175,7 +252,7 @@ void MazeApp::render(QVRWindow* /* w */,
         _prg.setUniformValue("normal_matrix", modelViewMatrix.normalMatrix());
         _prg.setUniformValue("color", QVector3D(1.0f, 0.0f, 0.0f));
         glBindVertexArray(_vao);
-        glDrawElements(GL_TRIANGLES, _vaoIndices, GL_UNSIGNED_INT, 0);
+        glDrawElements(GL_TRIANGLES, _vaoIndices, GL_UNSIGNED_INT, 0);*/
     }
 }
 
