@@ -1,12 +1,19 @@
 observer o0
     navigation wasdqe
-    tracking custom
+    tracking stationary
+
+observer o1
+	navigation stationary
+	tracking stationary
+
 process master
     window 0
         observer o0
-        output center
-        display_screen -1
-        size 1600 900
+		output center
+        size 800 600
 		position 100 100
-        screen_is_fixed_to_observer true
-        screen_is_given_by_center true
+	window debug
+		observer o1
+		output center
+		size 400 400
+		position 1000 100

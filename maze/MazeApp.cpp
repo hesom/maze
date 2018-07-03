@@ -27,7 +27,7 @@
 #include <QMessageBox>
 
 #include <qvr/manager.hpp>
-#include <glad/glad.h>
+#include <qvr/window.hpp>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
@@ -44,9 +44,11 @@ MazeApp::MazeApp() :
 
 bool MazeApp::initProcess(QVRProcess* p)
 {
-    if (!gladLoadGL()) {
+    /*if (!gladLoadGL()) {
         qCritical("Could not load GL functions with glad");
-    }
+    }*/
+
+    initializeOpenGLFunctions();
 
     int mazeWidth, mazeHeight, channels;
     // load maze layout
@@ -160,7 +162,7 @@ bool MazeApp::initProcess(QVRProcess* p)
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_TRUE, 0, 0);
     glEnableVertexAttribArray(1);
     GLuint indexBufFloor;
-    glGenBuffers(1, &indexBuf);
+    glGenBuffers(1, &indexBufFloor);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBufFloor);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(floorIndices), floorIndices, GL_STATIC_DRAW);
     _vaoIndicesFloor = 6;
@@ -175,7 +177,7 @@ bool MazeApp::initProcess(QVRProcess* p)
     return true;
 }
 
-void MazeApp::render(QVRWindow* /* w */,
+void MazeApp::render(QVRWindow*  w ,
         const QVRRenderContext& context, const unsigned int* textures)
 {
     for (int view = 0; view < context.viewCount(); view++) {
@@ -191,8 +193,18 @@ void MazeApp::render(QVRWindow* /* w */,
         // Set up view
         glViewport(0, 0, width, height);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        QMatrix4x4 projectionMatrix = context.frustum(view).toMatrix4x4();
-        QMatrix4x4 viewMatrix = context.viewMatrix(view);
+
+        QMatrix4x4 projectionMatrix;
+        QMatrix4x4 viewMatrix;
+
+        if (w->id() == "debug") {
+            projectionMatrix.ortho(-40.0f, 40.0f, -40.0f, 40.0f, 0.1f, 100.0f);
+            viewMatrix.lookAt(QVector3D(0.0f, 10.0f, 0.0f), QVector3D(0.0f, 0.0f, 0.0f), QVector3D(-1.0f, 0.0f, 0.0f));
+        } else {
+            projectionMatrix = context.frustum(view).toMatrix4x4();
+            viewMatrix = context.viewMatrix(view);
+        }
+
         // Set up shader program
         glUseProgram(_prg.programId());
         _prg.setUniformValue("projection_matrix", projectionMatrix);
@@ -256,16 +268,6 @@ void MazeApp::render(QVRWindow* /* w */,
                 }
             }
         }
-        /*QMatrix4x4 modelMatrix;
-        modelMatrix.translate(0.0f, 0.0f, -15.0f);
-        modelMatrix.rotate(_rotationAngle, 1.0f, 0.5f, 0.0f);
-        QMatrix4x4 modelViewMatrix = viewMatrix * modelMatrix;
-        _prg.setUniformValue("modelview_matrix", modelViewMatrix);
-        _prg.setUniformValue("view_matrix", viewMatrix);
-        _prg.setUniformValue("normal_matrix", modelViewMatrix.normalMatrix());
-        _prg.setUniformValue("color", QVector3D(1.0f, 0.0f, 0.0f));
-        glBindVertexArray(_vao);
-        glDrawElements(GL_TRIANGLES, _vaoIndices, GL_UNSIGNED_INT, 0);*/
     }
 }
 
@@ -309,6 +311,10 @@ int main(int argc, char* argv[])
 {
     QGuiApplication app(argc, argv);
     QVRManager manager(argc, argv);
+    QSurfaceFormat format;
+    format.setProfile(QSurfaceFormat::CoreProfile);
+    format.setVersion(3,3);
+    QSurfaceFormat::setDefaultFormat(format);
 
     /* Then start QVR with the app */
     MazeApp qvrapp;

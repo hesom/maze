@@ -25,6 +25,7 @@
 #define QVR_EXAMPLE_OPENGL_MINIMAL_HPP
 
 #include <QOpenGLShaderProgram>
+#include <QOpenGLExtraFunctions>
 #include <QElapsedTimer>
 
 #include <qvr/app.hpp>
@@ -38,7 +39,7 @@ enum class GridCell : int
     SPAWN
 };
 
-class MazeApp : public QVRApp
+class MazeApp : public QVRApp, protected QOpenGLExtraFunctions
 {
 private:
     /* Data not directly relevant for rendering */
@@ -78,7 +79,6 @@ public:
     void keyPressEvent(const QVRRenderContext& context, QKeyEvent* event) override;
 
     void exitProcess(QVRProcess* p) override;
-
 
     // custom functions
     GridCell GetCell(int row, int col)
