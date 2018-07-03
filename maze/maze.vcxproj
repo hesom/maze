@@ -79,6 +79,7 @@
     <QtRcc>
       <ExecutionDescription>Rcc'ing %(Identity)...</ExecutionDescription>
       <OutputFile>.\GeneratedFiles\qrc_%(Filename).cpp</OutputFile>
+      <AdditionalDependencies>$(ProjectDir)\fragment-shader.glsl; $(ProjectDir)\vertex-shader.glsl;</AdditionalDependencies>
     </QtRcc>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -110,6 +111,7 @@
     <QtRcc>
       <ExecutionDescription>Rcc'ing %(Identity)...</ExecutionDescription>
       <OutputFile>.\GeneratedFiles\qrc_%(Filename).cpp</OutputFile>
+      <AdditionalDependencies>$(ProjectDir)\fragment-shader.glsl; $(ProjectDir)\vertex-shader.glsl;</AdditionalDependencies>
     </QtRcc>
   </ItemDefinitionGroup>
   <ItemGroup>

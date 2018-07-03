@@ -6,7 +6,7 @@ process master
         observer o0
         output center
         display_screen -1
-        position 0 0
-        size 800 600
+        size 1600 900
+		position 100 100
         screen_is_fixed_to_observer true
         screen_is_given_by_center true

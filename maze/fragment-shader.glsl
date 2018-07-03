@@ -23,11 +23,29 @@
 
 #version 330
 
-smooth in vec3 vcolor;
+uniform vec3 color;
+
+in vec3 vnormal;
+in vec3 vview;
+in vec3 vlight;
 
 layout(location = 0) out vec4 fcolor;
 
+const float kd = 0.5;
+const float ks = 0.5;
+const float shininess = 120.0;
+
 void main(void)
 {
-    fcolor = vec4(vcolor, 1.0);
+    vec3 n = normalize(vnormal);
+    vec3 v = -normalize(vview);
+    vec3 l = normalize(vlight);
+
+    vec3 h = normalize(l + v);
+
+    float diffuse = kd * max(dot(l, n), 0.0);
+
+    float specular = clamp(ks * pow(max(dot(h, n), 0.0), shininess), 0.0, 1.0);
+
+    fcolor = vec4(color * vec3(0.2 + diffuse + specular), 1.0);
 }

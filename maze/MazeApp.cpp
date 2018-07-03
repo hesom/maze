@@ -87,23 +87,25 @@ bool MazeApp::initProcess(QVRProcess* p)
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, _fboDepthTex, 0);
 
     // Vertex array object
-    static const GLfloat boxPositions[] = {
-        -0.8f, +0.8f, +1.0f,   +0.8f, +0.8f, +1.0f,   +0.8f, -0.8f, +1.0f,   -0.8f, -0.8f, +1.0f, // front
-        -0.8f, +0.8f, -1.0f,   +0.8f, +0.8f, -1.0f,   +0.8f, -0.8f, -1.0f,   -0.8f, -0.8f, -1.0f, // back
-        +1.0f, +0.8f, -0.8f,   +1.0f, +0.8f, +0.8f,   +1.0f, -0.8f, +0.8f,   +1.0f, -0.8f, -0.8f, // right
-        -1.0f, +0.8f, -0.8f,   -1.0f, +0.8f, +0.8f,   -1.0f, -0.8f, +0.8f,   -1.0f, -0.8f, -0.8f, // left
-        -0.8f, +1.0f, +0.8f,   +0.8f, +1.0f, +0.8f,   +0.8f, +1.0f, -0.8f,   -0.8f, +1.0f, -0.8f, // top
-        -0.8f, -1.0f, +0.8f,   +0.8f, -1.0f, +0.8f,   +0.8f, -1.0f, -0.8f,   -0.8f, -1.0f, -0.8f  // bottom
+    static const GLfloat wallVertices[] = {
+        -1.0f, +1.0f, +1.0f,   +1.0f, +1.0f, +1.0f,   +1.0f, -1.0f, +1.0f,   -1.0f, -1.0f, +1.0f, // front
+        -1.0f, +1.0f, -1.0f,   +1.0f, +1.0f, -1.0f,   +1.0f, -1.0f, -1.0f,   -1.0f, -1.0f, -1.0f, // back
+        +1.0f, +1.0f, -1.0f,   +1.0f, +1.0f, +1.0f,   +1.0f, -1.0f, +1.0f,   +1.0f, -1.0f, -1.0f, // right
+        -1.0f, +1.0f, -1.0f,   -1.0f, +1.0f, +1.0f,   -1.0f, -1.0f, +1.0f,   -1.0f, -1.0f, -1.0f, // left
+        -1.0f, +1.0f, +1.0f,   +1.0f, +1.0f, +1.0f,   +1.0f, +1.0f, -1.0f,   -1.0f, +1.0f, -1.0f, // top
+        -1.0f, -1.0f, +1.0f,   +1.0f, -1.0f, +1.0f,   +1.0f, -1.0f, -1.0f,   -1.0f, -1.0f, -1.0f  // bottom
     };
-    static const GLubyte boxColors[] = {
-        237,  92, 130,   237,  92, 130,   237,  92, 130,   237,  92, 130, // front
-         67, 109, 143,    67, 109, 143,    67, 109, 143,    67, 109, 143, // back
-        226, 156,  50,   226, 156,  50,   226, 156,  50,   226, 156,  50, // right
-        177, 195,  84,   177, 195,  84,   177, 195,  84,   177, 195,  84, // left
-         82, 176, 126,    82, 176, 126,    82, 176, 126,    82, 176, 126, // top
-         86, 140, 140,    86, 140, 140,    86, 140, 140,    86, 140, 140  // bottom
+
+    static const GLfloat wallNormals[] = {
+        0.0f, 0.0f, +1.0f,   0.0f, 0.0f, +1.0f,   0.0f, 0.0f, +1.0f,   0.0f, 0.0f, +1.0f, // front
+        0.0f, 0.0f, -1.0f,   0.0f, 0.0f, -1.0f,   0.0f, 0.0f, -1.0f,   0.0f, 0.0f, -1.0f, // back
+        +1.0f, 0.0f, 0.0f,   +1.0f, 0.0f, 0.0f,   +1.0f, 0.0f, 0.0f,   +1.0f, 0.0f, 0.0f, // right
+        -1.0f, 0.0f, 0.0f,   -1.0f, 0.0f, 0.0f,   -1.0f, 0.0f, 0.0f,   -1.0f, 0.0f, 0.0f, // left
+        0.0f, +1.0f, 0.0f,   0.0f, +1.0f, 0.0f,   0.0f, +1.0f, 0.0f,   0.0f, +1.0f, 0.0f, // top
+        0.0f, -1.0f, 0.0f,   0.0f, -1.0f, 0.0f,   0.0f, -1.0f, 0.0f,   0.0f, -1.0f, 0.0f  // bottom
     };
-    static const GLuint boxIndices[] = {
+
+    static const GLuint wallIndices[] = {
         0, 3, 1, 1, 3, 2, // front face
         4, 5, 7, 5, 6, 7, // back face
         8, 9, 11, 9, 10, 11, // right face
@@ -116,25 +118,27 @@ bool MazeApp::initProcess(QVRProcess* p)
     GLuint positionBuf;
     glGenBuffers(1, &positionBuf);
     glBindBuffer(GL_ARRAY_BUFFER, positionBuf);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(boxPositions), boxPositions, GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(wallVertices), wallVertices, GL_STATIC_DRAW);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, 0);
     glEnableVertexAttribArray(0);
-    GLuint colorBuf;
-    glGenBuffers(1, &colorBuf);
-    glBindBuffer(GL_ARRAY_BUFFER, colorBuf);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(boxColors), boxColors, GL_STATIC_DRAW);
-    glVertexAttribPointer(1, 3, GL_UNSIGNED_BYTE, GL_TRUE, 0, 0);
+    GLuint normalBuf;
+    glGenBuffers(1, &normalBuf);
+    glBindBuffer(GL_ARRAY_BUFFER, normalBuf);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(wallNormals), wallNormals, GL_STATIC_DRAW);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_TRUE, 0, 0);
     glEnableVertexAttribArray(1);
     GLuint indexBuf;
     glGenBuffers(1, &indexBuf);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBuf);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(boxIndices), boxIndices, GL_STATIC_DRAW);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(wallIndices), wallIndices, GL_STATIC_DRAW);
     _vaoIndices = 36;
 
     // Shader program
     _prg.addShaderFromSourceFile(QOpenGLShader::Vertex, ":vertex-shader.glsl");
     _prg.addShaderFromSourceFile(QOpenGLShader::Fragment, ":fragment-shader.glsl");
-    _prg.link();
+    if (!_prg.link()) {
+        qCritical("Could not link program! Check shaders!");
+    }
 
     return true;
 }
@@ -167,7 +171,9 @@ void MazeApp::render(QVRWindow* /* w */,
         modelMatrix.rotate(_rotationAngle, 1.0f, 0.5f, 0.0f);
         QMatrix4x4 modelViewMatrix = viewMatrix * modelMatrix;
         _prg.setUniformValue("modelview_matrix", modelViewMatrix);
+        _prg.setUniformValue("view_matrix", viewMatrix);
         _prg.setUniformValue("normal_matrix", modelViewMatrix.normalMatrix());
+        _prg.setUniformValue("color", QVector3D(1.0f, 0.0f, 0.0f));
         glBindVertexArray(_vao);
         glDrawElements(GL_TRIANGLES, _vaoIndices, GL_UNSIGNED_INT, 0);
     }

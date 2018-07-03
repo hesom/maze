@@ -25,15 +25,23 @@
 
 uniform mat4 projection_matrix;
 uniform mat4 modelview_matrix;
+uniform mat4 view_matrix;
 uniform mat3 normal_matrix;
 
-layout(location = 0) in vec4 pos;
-layout(location = 1) in vec3 color;
+layout(location = 0) in vec3 pos;
+layout(location = 1) in vec3 normal;
 
-smooth out vec3 vcolor;
+out vec3 vnormal;
+out vec3 vview;
+out vec3 vlight;
+
+const vec4 wlight = vec4(-10.0, -30.0, -10.0, 1.0);
 
 void main(void)
 {
-    vcolor = color;
-    gl_Position = projection_matrix * modelview_matrix * pos;
+    vec4 position = vec4(pos, 1.0);
+    vnormal = normal_matrix * normal;
+    vview = -(modelview_matrix * position).xyz;
+    vlight = -(view_matrix * wlight).xyz; // light is always at camera pos
+    gl_Position = projection_matrix * modelview_matrix * position;
 }
