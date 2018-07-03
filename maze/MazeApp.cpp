@@ -57,6 +57,7 @@ bool MazeApp::initProcess(QVRProcess* p)
         qCritical("Could not load maze layout");
     }
     mazeGrid = new GridCell[mazeWidth * mazeHeight];
+    renderMask = new bool[mazeWidth * mazeHeight];
     gridHeight = mazeHeight;
     gridWidth = mazeWidth;
     for (int cell = 0; cell < gridHeight * gridWidth; cell++) {
@@ -76,6 +77,8 @@ bool MazeApp::initProcess(QVRProcess* p)
         } else if (!red && !green && !blue) {
             mazeGrid[cell] = GridCell::SPAWN;
         }
+
+        renderMask[cell] = true;
     }
     stbi_image_free(mazeImage);
 
@@ -123,7 +126,7 @@ bool MazeApp::initProcess(QVRProcess* p)
         0.0f, 1.0f, 0.0f,   0.0f, 1.0f, 0.0f,   0.0f, 1.0f, 0.0f,   0.0f, 1.0f, 0.0f  // bottom
     };
     static const GLuint floorIndices[] = {
-        0, 3, 1, 1, 3, 2 // front face
+        0, 1, 3, 1, 2, 3 // front face
     };
 
 
@@ -203,69 +206,77 @@ void MazeApp::render(QVRWindow*  w ,
         } else {
             projectionMatrix = context.frustum(view).toMatrix4x4();
             viewMatrix = context.viewMatrix(view);
+            const QVRFrustum& frustum = context.frustum(view);
+            QVector3D nTop = QVector3D(0.0f, frustum.nearPlane(), frustum.topPlane()).normalized();
+            QVector3D nBottom = -QVector3D(0.0f, frustum.nearPlane(), frustum.bottomPlane()).normalized();
+            QVector3D nRight = QVector3D(frustum.nearPlane(), 0.0f, frustum.rightPlane()).normalized();
+            QVector3D nLeft = -QVector3D(frustum.nearPlane(), 0.0f, frustum.leftPlane()).normalized();
+            for (int col = 0; col < gridWidth; col++) {
+                for (int row = 0; row < gridHeight; row++) {
+                    float x = -((float)gridWidth) + 2.0f * col;
+                    float y = ((float)gridHeight) - 2.0f * row;
+                    QMatrix4x4 modelMatrix;
+                    modelMatrix.translate(x, 1.0f, y);
+                    QVector3D boundingSphereCenter = (viewMatrix * modelMatrix).column(3).toVector3D();
+                    const float boundingSphereRadius = 2.0f;
+                    if (boundingSphereCenter.z() > (-frustum.nearPlane() + boundingSphereRadius)) {
+                        renderMask[row * gridWidth + col] = false;
+                    } else if (boundingSphereCenter.z() < (-frustum.farPlane() + boundingSphereRadius)) {
+                        renderMask[row * gridWidth + col] = false;
+                    } else if (QVector3D::dotProduct(nTop, boundingSphereCenter) > boundingSphereRadius) {
+                        renderMask[row * gridWidth + col] = false;
+                    } else if (QVector3D::dotProduct(nBottom, boundingSphereCenter) > boundingSphereRadius) {
+                        renderMask[row * gridWidth + col] = false;
+                    } else if (QVector3D::dotProduct(nLeft, boundingSphereCenter) > boundingSphereRadius) {
+                        renderMask[row * gridWidth + col] = false;
+                    } else if (QVector3D::dotProduct(nRight, boundingSphereCenter) > boundingSphereRadius) {
+                        renderMask[row * gridWidth + col] = false;
+                    }
+                    
+                    else {
+                        renderMask[row * gridWidth + col] = true;
+                    }
+                }
+            }
         }
 
         // Set up shader program
         glUseProgram(_prg.programId());
         _prg.setUniformValue("projection_matrix", projectionMatrix);
         glEnable(GL_DEPTH_TEST);
+        glEnable(GL_CULL_FACE);
         // Render
         for (int col = 0; col < gridWidth; col++) {
             for (int row = 0; row < gridHeight; row++) {
                 auto cell = GetCell(col, row);
-                if (cell == GridCell::WALL) {
-                    float x = -((float)gridWidth) + 2.0f * col;
-                    float y = ((float)gridHeight) - 2.0f * row;
+                float x = -((float)gridWidth) + 2.0f * col;
+                float y = ((float)gridHeight) - 2.0f * row;
+                if (renderMask[row * gridWidth + col]) {
                     QMatrix4x4 modelMatrix;
                     modelMatrix.translate(x, 1.0f, y);
-                    //modelMatrix.rotate(_rotationAngle, 1.0f, 0.5f, 0.0f);
                     QMatrix4x4 modelViewMatrix = viewMatrix * modelMatrix;
                     _prg.setUniformValue("modelview_matrix", modelViewMatrix);
                     _prg.setUniformValue("view_matrix", viewMatrix);
                     _prg.setUniformValue("normal_matrix", modelViewMatrix.normalMatrix());
-                    _prg.setUniformValue("color", QVector3D(1.0f, 0.0f, 0.0f));
-                    glBindVertexArray(_vaoWall);
-                    glDrawElements(GL_TRIANGLES, _vaoIndicesWall, GL_UNSIGNED_INT, 0);
-                } else if (cell == GridCell::EMPTY) {
-                    float x = -((float)gridWidth) + 2.0f * col;
-                    float y = ((float)gridHeight) - 2.0f * row;
-                    QMatrix4x4 modelMatrix;
-                    modelMatrix.translate(x, 1.0f, y);
-                    //modelMatrix.rotate(_rotationAngle, 1.0f, 0.5f, 0.0f);
-                    QMatrix4x4 modelViewMatrix = viewMatrix * modelMatrix;
-                    _prg.setUniformValue("modelview_matrix", modelViewMatrix);
-                    _prg.setUniformValue("view_matrix", viewMatrix);
-                    _prg.setUniformValue("normal_matrix", modelViewMatrix.normalMatrix());
-                    _prg.setUniformValue("color", QVector3D(0.5f, 0.5f, 0.5f));
-                    glBindVertexArray(_vaoFloor);
-                    glDrawElements(GL_TRIANGLES, _vaoIndicesFloor, GL_UNSIGNED_INT, 0);
-                } else if (cell == GridCell::FINISH) {
-                    float x = -((float)gridWidth) + 2.0f * col;
-                    float y = ((float)gridHeight) - 2.0f * row;
-                    QMatrix4x4 modelMatrix;
-                    modelMatrix.translate(x, 1.0f, y);
-                    //modelMatrix.rotate(_rotationAngle, 1.0f, 0.5f, 0.0f);
-                    QMatrix4x4 modelViewMatrix = viewMatrix * modelMatrix;
-                    _prg.setUniformValue("modelview_matrix", modelViewMatrix);
-                    _prg.setUniformValue("view_matrix", viewMatrix);
-                    _prg.setUniformValue("normal_matrix", modelViewMatrix.normalMatrix());
-                    _prg.setUniformValue("color", QVector3D(0.0f, 1.0f, 0.0f));
-                    glBindVertexArray(_vaoFloor);
-                    glDrawElements(GL_TRIANGLES, _vaoIndicesFloor, GL_UNSIGNED_INT, 0);
-                } else if (cell == GridCell::SPAWN) {
-                    float x = -((float)gridWidth) + 2.0f * col;
-                    float y = ((float)gridHeight) - 2.0f * row;
-                    QMatrix4x4 modelMatrix;
-                    modelMatrix.translate(x, 1.0f, y);
-                    //modelMatrix.rotate(_rotationAngle, 1.0f, 0.5f, 0.0f);
-                    QMatrix4x4 modelViewMatrix = viewMatrix * modelMatrix;
-                    _prg.setUniformValue("modelview_matrix", modelViewMatrix);
-                    _prg.setUniformValue("view_matrix", viewMatrix);
-                    _prg.setUniformValue("normal_matrix", modelViewMatrix.normalMatrix());
-                    _prg.setUniformValue("color", QVector3D(0.7f, 0.7f, 0.0f));
-                    glBindVertexArray(_vaoFloor);
-                    glDrawElements(GL_TRIANGLES, _vaoIndicesFloor, GL_UNSIGNED_INT, 0);
-                }
+
+                    if (cell == GridCell::WALL) {
+                        _prg.setUniformValue("color", QVector3D(1.0f, 0.0f, 0.0f));
+                        glBindVertexArray(_vaoWall);
+                        glDrawElements(GL_TRIANGLES, _vaoIndicesWall, GL_UNSIGNED_INT, 0);
+                    } else if (cell == GridCell::EMPTY) {
+                        _prg.setUniformValue("color", QVector3D(0.5f, 0.5f, 0.5f));
+                        glBindVertexArray(_vaoFloor);
+                        glDrawElements(GL_TRIANGLES, _vaoIndicesFloor, GL_UNSIGNED_INT, 0);
+                    } else if (cell == GridCell::FINISH) {
+                        _prg.setUniformValue("color", QVector3D(0.0f, 1.0f, 0.0f));
+                        glBindVertexArray(_vaoFloor);
+                        glDrawElements(GL_TRIANGLES, _vaoIndicesFloor, GL_UNSIGNED_INT, 0);
+                    } else if (cell == GridCell::SPAWN) {
+                        _prg.setUniformValue("color", QVector3D(0.7f, 0.7f, 0.0f));
+                        glBindVertexArray(_vaoFloor);
+                        glDrawElements(GL_TRIANGLES, _vaoIndicesFloor, GL_UNSIGNED_INT, 0);
+                    }
+                } 
             }
         }
     }

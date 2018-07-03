@@ -55,6 +55,7 @@ private:
     unsigned int _vaoIndicesFloor;
     QOpenGLShaderProgram _prg;  // Shader program for rendering
     GridCell* mazeGrid;    // 0 = nothing, 1 = wall, 2 = finish, (3 = spawn)
+    bool* renderMask;
     size_t gridWidth;
     size_t gridHeight;
 
