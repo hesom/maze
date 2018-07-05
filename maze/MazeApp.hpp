@@ -27,6 +27,8 @@
 #include <QOpenGLShaderProgram>
 #include <QOpenGLExtraFunctions>
 #include <QElapsedTimer>
+#include <vector>
+#include <algorithm>
 
 #include <qvr/app.hpp>
 #include <qvr/device.hpp>
@@ -38,6 +40,71 @@ enum class GridCell : int
     FINISH,
     SPAWN
 };
+
+struct Point
+{
+    float x;
+    float y;
+
+    Point(float x, float y)
+        :x(x), y(y)
+    {
+
+    }
+};
+
+struct RenderObject
+{
+    GridCell type;
+    Point position = Point(0.0,0.0);
+    bool visible;
+};
+
+struct Node
+{
+    RenderObject data;
+    bool isLeaf;
+    int axis;
+    float border;
+    Node* left;
+    Node* right;
+};
+
+Node* kdTree(std::vector<RenderObject>& objects, int depth = 0);
+
+template<typename Func>
+void frontToBack(Node* root, QVector3D eye, Func f)
+{
+    if (root == nullptr) return;
+
+    f(root);
+    int axis = root->axis;
+    bool positive;
+    if (axis == 0) {
+        positive = eye.x() < root->border;
+    } else {
+        positive = eye.y() < root->border;
+    }
+    if (positive) {
+        frontToBack<Func>(root->left, eye, f);
+        frontToBack<Func>(root->right, eye, f);
+    } else {
+        frontToBack<Func>(root->right, eye, f);
+        frontToBack<Func>(root->left, eye, f);
+    }
+}
+
+template<typename Func>
+void inOrder(Node* root, Func f)
+{
+    if (root == nullptr) return;
+
+    inOrder<Func>(root->left, f);
+    f(root);
+    inOrder<Func>(root->right, f);
+}
+
+void freeTree(Node* root);
 
 class MazeApp : public QVRApp, protected QOpenGLExtraFunctions
 {
@@ -55,9 +122,13 @@ private:
     unsigned int _vaoIndicesFloor;
     QOpenGLShaderProgram _prg;  // Shader program for rendering
     GridCell* mazeGrid;    // 0 = nothing, 1 = wall, 2 = finish, (3 = spawn)
-    bool* renderMask;
     size_t gridWidth;
     size_t gridHeight;
+
+    std::vector<RenderObject> renderQueue;
+    Node* kdTreeRoot;
+
+    void renderTree(Node* root, const QMatrix4x4& viewMatrix);
 
     /* Dynamic data for rendering. Needs to be serialized. */
     float _rotationAngle;       // animated box rotation

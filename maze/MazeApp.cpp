@@ -57,7 +57,7 @@ bool MazeApp::initProcess(QVRProcess* p)
         qCritical("Could not load maze layout");
     }
     mazeGrid = new GridCell[mazeWidth * mazeHeight];
-    renderMask = new bool[mazeWidth * mazeHeight];
+    renderQueue.reserve(mazeWidth * mazeHeight);
     gridHeight = mazeHeight;
     gridWidth = mazeWidth;
     for (int cell = 0; cell < gridHeight * gridWidth; cell++) {
@@ -77,10 +77,23 @@ bool MazeApp::initProcess(QVRProcess* p)
         } else if (!red && !green && !blue) {
             mazeGrid[cell] = GridCell::SPAWN;
         }
-
-        renderMask[cell] = true;
     }
     stbi_image_free(mazeImage);
+
+    // fill render queue
+    for (int row = 0; row < gridWidth; row++) {
+        for (int col = 0; col < gridHeight; col++) {
+            RenderObject object;
+            float x = -((float)gridWidth) + 2.0f * col;
+            float y = ((float)gridHeight) - 2.0f * row;
+            object.position = Point(x, y);
+            object.type = GetCell(row, col);
+            object.visible = true;
+            renderQueue.push_back(object);
+        }
+    }
+
+    kdTreeRoot = kdTree(renderQueue);
 
     // Framebuffer object
     glGenFramebuffers(1, &_fbo);
@@ -187,71 +200,80 @@ void MazeApp::render(QVRWindow*  w ,
         // Get view dimensions
         int width = context.textureSize(view).width();
         int height = context.textureSize(view).height();
+
         // Set up framebuffer object to render into
         glBindTexture(GL_TEXTURE_2D, _fboDepthTex);
         glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, width, height,
                 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
         glBindFramebuffer(GL_FRAMEBUFFER, _fbo);
         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, textures[view], 0);
-        // Set up view
-        glViewport(0, 0, width, height);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         QMatrix4x4 projectionMatrix;
         QMatrix4x4 viewMatrix;
 
+        glUseProgram(_prg.programId());
+
+
+
         if (w->id() == "debug") {
             projectionMatrix.ortho(-40.0f, 40.0f, -40.0f, 40.0f, 0.1f, 100.0f);
+            _prg.setUniformValue("projection_matrix", projectionMatrix);
             viewMatrix.lookAt(QVector3D(0.0f, 10.0f, 0.0f), QVector3D(0.0f, 0.0f, 0.0f), QVector3D(-1.0f, 0.0f, 0.0f));
         } else {
             projectionMatrix = context.frustum(view).toMatrix4x4();
+            _prg.setUniformValue("projection_matrix", projectionMatrix);
             viewMatrix = context.viewMatrix(view);
+            
+            // occlusion culling
             const QVRFrustum& frustum = context.frustum(view);
             QVector3D nTop = QVector3D(0.0f, frustum.nearPlane(), frustum.topPlane()).normalized();
             QVector3D nBottom = -QVector3D(0.0f, frustum.nearPlane(), frustum.bottomPlane()).normalized();
             QVector3D nRight = QVector3D(frustum.nearPlane(), 0.0f, frustum.rightPlane()).normalized();
             QVector3D nLeft = -QVector3D(frustum.nearPlane(), 0.0f, frustum.leftPlane()).normalized();
-            for (int col = 0; col < gridWidth; col++) {
-                for (int row = 0; row < gridHeight; row++) {
-                    float x = -((float)gridWidth) + 2.0f * col;
-                    float y = ((float)gridHeight) - 2.0f * row;
+
+            inOrder(kdTreeRoot, [&](Node* root) {
+                if (root->isLeaf) {
+                    float x = root->data.position.x;
+                    float y = root->data.position.y;
                     QMatrix4x4 modelMatrix;
                     modelMatrix.translate(x, 1.0f, y);
                     QVector3D boundingSphereCenter = (viewMatrix * modelMatrix).column(3).toVector3D();
                     const float boundingSphereRadius = 2.0f;
                     if (boundingSphereCenter.z() > (-frustum.nearPlane() + boundingSphereRadius)) {
-                        renderMask[row * gridWidth + col] = false;
+                        root->data.visible = false;
                     } else if (boundingSphereCenter.z() < (-frustum.farPlane() + boundingSphereRadius)) {
-                        renderMask[row * gridWidth + col] = false;
+                        root->data.visible = false;
                     } else if (QVector3D::dotProduct(nTop, boundingSphereCenter) > boundingSphereRadius) {
-                        renderMask[row * gridWidth + col] = false;
+                        root->data.visible = false;
                     } else if (QVector3D::dotProduct(nBottom, boundingSphereCenter) > boundingSphereRadius) {
-                        renderMask[row * gridWidth + col] = false;
+                        root->data.visible = false;
                     } else if (QVector3D::dotProduct(nLeft, boundingSphereCenter) > boundingSphereRadius) {
-                        renderMask[row * gridWidth + col] = false;
+                        root->data.visible = false;
                     } else if (QVector3D::dotProduct(nRight, boundingSphereCenter) > boundingSphereRadius) {
-                        renderMask[row * gridWidth + col] = false;
-                    }
-                    
-                    else {
-                        renderMask[row * gridWidth + col] = true;
+                        root->data.visible = false;
+                    } else {
+                        root->data.visible = true;
                     }
                 }
-            }
+            });
         }
 
-        // Set up shader program
-        glUseProgram(_prg.programId());
-        _prg.setUniformValue("projection_matrix", projectionMatrix);
+        // Set render state
+        glViewport(0, 0, width, height);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         glEnable(GL_DEPTH_TEST);
         glEnable(GL_CULL_FACE);
+
         // Render
-        for (int col = 0; col < gridWidth; col++) {
-            for (int row = 0; row < gridHeight; row++) {
-                auto cell = GetCell(col, row);
-                float x = -((float)gridWidth) + 2.0f * col;
-                float y = ((float)gridHeight) - 2.0f * row;
-                if (renderMask[row * gridWidth + col]) {
+
+        QVector3D eye = context.navigationPosition();
+
+        frontToBack(kdTreeRoot, eye, [&](Node* root){
+            if (root->isLeaf) {
+                auto cell = root->data.type;
+                float x = root->data.position.x;
+                float y = root->data.position.y;
+                if (root->data.visible) {
                     QMatrix4x4 modelMatrix;
                     modelMatrix.translate(x, 1.0f, y);
                     QMatrix4x4 modelViewMatrix = viewMatrix * modelMatrix;
@@ -276,10 +298,49 @@ void MazeApp::render(QVRWindow*  w ,
                         glBindVertexArray(_vaoFloor);
                         glDrawElements(GL_TRIANGLES, _vaoIndicesFloor, GL_UNSIGNED_INT, 0);
                     }
-                } 
+                }
+            }
+        });
+    }
+}
+
+void MazeApp::renderTree(Node* root, const QMatrix4x4& viewMatrix)
+{
+    if (root == nullptr) return;
+    if (root->isLeaf) {
+        auto cell = root->data.type;
+        float x = root->data.position.x;
+        float y = root->data.position.y;
+        if (root->data.visible) {
+            QMatrix4x4 modelMatrix;
+            modelMatrix.translate(x, 1.0f, y);
+            QMatrix4x4 modelViewMatrix = viewMatrix * modelMatrix;
+            _prg.setUniformValue("modelview_matrix", modelViewMatrix);
+            _prg.setUniformValue("view_matrix", viewMatrix);
+            _prg.setUniformValue("normal_matrix", modelViewMatrix.normalMatrix());
+
+            if (cell == GridCell::WALL) {
+                _prg.setUniformValue("color", QVector3D(1.0f, 0.0f, 0.0f));
+                glBindVertexArray(_vaoWall);
+                glDrawElements(GL_TRIANGLES, _vaoIndicesWall, GL_UNSIGNED_INT, 0);
+            } else if (cell == GridCell::EMPTY) {
+                _prg.setUniformValue("color", QVector3D(0.5f, 0.5f, 0.5f));
+                glBindVertexArray(_vaoFloor);
+                glDrawElements(GL_TRIANGLES, _vaoIndicesFloor, GL_UNSIGNED_INT, 0);
+            } else if (cell == GridCell::FINISH) {
+                _prg.setUniformValue("color", QVector3D(0.0f, 1.0f, 0.0f));
+                glBindVertexArray(_vaoFloor);
+                glDrawElements(GL_TRIANGLES, _vaoIndicesFloor, GL_UNSIGNED_INT, 0);
+            } else if (cell == GridCell::SPAWN) {
+                _prg.setUniformValue("color", QVector3D(0.7f, 0.7f, 0.0f));
+                glBindVertexArray(_vaoFloor);
+                glDrawElements(GL_TRIANGLES, _vaoIndicesFloor, GL_UNSIGNED_INT, 0);
             }
         }
     }
+
+    renderTree(root->left, viewMatrix);
+    renderTree(root->right, viewMatrix);
 }
 
 void MazeApp::update(const QList<QVRObserver*>& observers)
@@ -315,6 +376,7 @@ void MazeApp::keyPressEvent(const QVRRenderContext& /* context */, QKeyEvent* ev
 
 void MazeApp::exitProcess(QVRProcess* process)
 {
+    freeTree(kdTreeRoot);
     delete[] mazeGrid;
 }
 
@@ -336,4 +398,52 @@ int main(int argc, char* argv[])
 
     /* Enter the standard Qt loop */
     return app.exec();
+}
+
+Node* kdTree(std::vector<RenderObject>& objects, int depth)
+{
+    if (objects.size() == 0) return nullptr;
+    if (objects.size() == 1)
+    {
+        Node* root = new Node;
+        root->data = objects.at(0);
+        root->isLeaf = true;
+        root->left = nullptr;
+        root->right = nullptr;
+        return root;
+    }
+    int axis = depth % 2;
+
+    std::sort(objects.begin(), objects.end(), [&axis](RenderObject a, RenderObject b) {
+        if (axis == 0) {
+            return a.position.x < b.position.x;
+        } else {
+            return a.position.y < b.position.y;
+        }
+    });
+    RenderObject median = objects.at(objects.size() / 2);
+    Node* root = new Node;
+    root->axis = axis;
+    root->isLeaf = false;
+    if (axis == 0) {
+        root->border = median.position.x;
+    } else {
+        root->border = median.position.y;
+    }
+    std::vector<RenderObject> left(&objects[0], &objects[objects.size() / 2]);
+    std::vector<RenderObject> right(&objects[objects.size() / 2], &objects.back() + 1);
+    root->left = kdTree(left, depth + 1);
+    root->right = kdTree(right, depth + 1);
+    return root;
+}
+
+void freeTree(Node* root)
+{
+    if (root == nullptr) {
+        return;
+    }
+    freeTree(root->left);
+    freeTree(root->right);
+    delete root;
+    root = nullptr;
 }
