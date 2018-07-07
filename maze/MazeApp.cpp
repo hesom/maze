@@ -21,6 +21,7 @@
  * SOFTWARE.
  */
 #include <iostream>
+#include <queue>
 
 #include <QGuiApplication>
 #include <QKeyEvent>
@@ -88,12 +89,12 @@ bool MazeApp::initProcess(QVRProcess* p)
             float y = ((float)gridHeight) - 2.0f * row;
             object.position = Point(x, y);
             object.type = GetCell(row, col);
-            object.visible = true;
             renderQueue.push_back(object);
         }
     }
 
     kdTreeRoot = kdTree(renderQueue);
+    calcBorders(kdTreeRoot);
 
     // Framebuffer object
     glGenFramebuffers(1, &_fbo);
@@ -207,73 +208,25 @@ void MazeApp::render(QVRWindow*  w ,
                 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
         glBindFramebuffer(GL_FRAMEBUFFER, _fbo);
         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, textures[view], 0);
+        glViewport(0, 0, width, height);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         QMatrix4x4 projectionMatrix;
         QMatrix4x4 viewMatrix;
+        QVector3D eye = context.navigationPosition();
 
         glUseProgram(_prg.programId());
-
-
 
         if (w->id() == "debug") {
             projectionMatrix.ortho(-40.0f, 40.0f, -40.0f, 40.0f, 0.1f, 100.0f);
             _prg.setUniformValue("projection_matrix", projectionMatrix);
             viewMatrix.lookAt(QVector3D(0.0f, 10.0f, 0.0f), QVector3D(0.0f, 0.0f, 0.0f), QVector3D(-1.0f, 0.0f, 0.0f));
-        } else {
-            projectionMatrix = context.frustum(view).toMatrix4x4();
-            _prg.setUniformValue("projection_matrix", projectionMatrix);
-            viewMatrix = context.viewMatrix(view);
-            
-            // occlusion culling
-            const QVRFrustum& frustum = context.frustum(view);
-            QVector3D nTop = QVector3D(0.0f, frustum.nearPlane(), frustum.topPlane()).normalized();
-            QVector3D nBottom = -QVector3D(0.0f, frustum.nearPlane(), frustum.bottomPlane()).normalized();
-            QVector3D nRight = QVector3D(frustum.nearPlane(), 0.0f, frustum.rightPlane()).normalized();
-            QVector3D nLeft = -QVector3D(frustum.nearPlane(), 0.0f, frustum.leftPlane()).normalized();
-
-            inOrder(kdTreeRoot, [&](Node* root) {
-                if (root->isLeaf) {
-                    float x = root->data.position.x;
-                    float y = root->data.position.y;
-                    QMatrix4x4 modelMatrix;
-                    modelMatrix.translate(x, 1.0f, y);
-                    QVector3D boundingSphereCenter = (viewMatrix * modelMatrix).column(3).toVector3D();
-                    const float boundingSphereRadius = 2.0f;
-                    if (boundingSphereCenter.z() > (-frustum.nearPlane() + boundingSphereRadius)) {
-                        root->data.visible = false;
-                    } else if (boundingSphereCenter.z() < (-frustum.farPlane() + boundingSphereRadius)) {
-                        root->data.visible = false;
-                    } else if (QVector3D::dotProduct(nTop, boundingSphereCenter) > boundingSphereRadius) {
-                        root->data.visible = false;
-                    } else if (QVector3D::dotProduct(nBottom, boundingSphereCenter) > boundingSphereRadius) {
-                        root->data.visible = false;
-                    } else if (QVector3D::dotProduct(nLeft, boundingSphereCenter) > boundingSphereRadius) {
-                        root->data.visible = false;
-                    } else if (QVector3D::dotProduct(nRight, boundingSphereCenter) > boundingSphereRadius) {
-                        root->data.visible = false;
-                    } else {
-                        root->data.visible = true;
-                    }
-                }
-            });
-        }
-
-        // Set render state
-        glViewport(0, 0, width, height);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        glEnable(GL_DEPTH_TEST);
-        glEnable(GL_CULL_FACE);
-
-        // Render
-
-        QVector3D eye = context.navigationPosition();
-
-        frontToBack(kdTreeRoot, eye, [&](Node* root){
-            if (root->isLeaf) {
-                auto cell = root->data.type;
-                float x = root->data.position.x;
-                float y = root->data.position.y;
-                if (root->data.visible) {
+            inOrder(kdTreeRoot, [&](Node* node) {
+                if (node->renderedThisFrame) {
+                    // immediately render
+                    auto cell = node->data.type;
+                    float x = node->data.position.x;
+                    float y = node->data.position.y;
                     QMatrix4x4 modelMatrix;
                     modelMatrix.translate(x, 1.0f, y);
                     QMatrix4x4 modelViewMatrix = viewMatrix * modelMatrix;
@@ -281,6 +234,9 @@ void MazeApp::render(QVRWindow*  w ,
                     _prg.setUniformValue("view_matrix", viewMatrix);
                     _prg.setUniformValue("normal_matrix", modelViewMatrix.normalMatrix());
 
+                    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+                    glDepthMask(GL_TRUE);
+                    glEnable(GL_DEPTH_TEST);
                     if (cell == GridCell::WALL) {
                         _prg.setUniformValue("color", QVector3D(1.0f, 0.0f, 0.0f));
                         glBindVertexArray(_vaoWall);
@@ -299,48 +255,284 @@ void MazeApp::render(QVRWindow*  w ,
                         glDrawElements(GL_TRIANGLES, _vaoIndicesFloor, GL_UNSIGNED_INT, 0);
                     }
                 }
+            });
+        } else {
+            projectionMatrix = context.frustum(view).toMatrix4x4();
+            _prg.setUniformValue("projection_matrix", projectionMatrix);
+            viewMatrix = context.viewMatrix(view);
+
+            inOrder(kdTreeRoot, [](Node* node) {
+                node->renderedThisFrame = false;
+            });
+
+            // check visible nodes of last frame
+            for (int i = 0; i < vQueries.size(); i++) {
+                while (!vQueries.at(i)->isAvailable()) {
+
+                }
+                if (vQueries.at(i)->getResult()) {
+                    vQueries.at(i)->getNode()->visible = true;
+                } else {
+                    vQueries.at(i)->getNode()->visible = false;
+                    pullUp(vQueries.at(i)->getNode());
+                }
+                delete vQueries.at(i);
+                vQueries.erase(vQueries.begin() + i);
             }
-        });
-    }
-}
 
-void MazeApp::renderTree(Node* root, const QMatrix4x4& viewMatrix)
-{
-    if (root == nullptr) return;
-    if (root->isLeaf) {
-        auto cell = root->data.type;
-        float x = root->data.position.x;
-        float y = root->data.position.y;
-        if (root->data.visible) {
-            QMatrix4x4 modelMatrix;
-            modelMatrix.translate(x, 1.0f, y);
-            QMatrix4x4 modelViewMatrix = viewMatrix * modelMatrix;
-            _prg.setUniformValue("modelview_matrix", modelViewMatrix);
-            _prg.setUniformValue("view_matrix", viewMatrix);
-            _prg.setUniformValue("normal_matrix", modelViewMatrix.normalMatrix());
+            // frustum culling
+            const QVRFrustum& frustum = context.frustum(view);
+            QVector3D nTop = QVector3D(0.0f, frustum.nearPlane(), frustum.topPlane()).normalized();
+            QVector3D nBottom = -QVector3D(0.0f, frustum.nearPlane(), frustum.bottomPlane()).normalized();
+            QVector3D nRight = QVector3D(frustum.nearPlane(), 0.0f, frustum.rightPlane()).normalized();
+            QVector3D nLeft = -QVector3D(frustum.nearPlane(), 0.0f, frustum.leftPlane()).normalized();
+            if (frustumCulling) {
+                inOrder(kdTreeRoot, [&](Node* root) {
+                    if (root->isLeaf) {
+                        float x = root->data.position.x;
+                        float y = root->data.position.y;
+                        QMatrix4x4 modelMatrix;
+                        modelMatrix.translate(x, 1.0f, y);
+                        QVector3D boundingSphereCenter = (viewMatrix * modelMatrix).column(3).toVector3D();
+                        const float boundingSphereRadius = 2.0f;
+                        if (boundingSphereCenter.z() > (-frustum.nearPlane() + boundingSphereRadius)) {
+                            root->visible = false;
+                        } else if (boundingSphereCenter.z() < (-frustum.farPlane() + boundingSphereRadius)) {
+                            root->visible = false;
+                        } else if (QVector3D::dotProduct(nTop, boundingSphereCenter) > boundingSphereRadius) {
+                            root->visible = false;
+                        } else if (QVector3D::dotProduct(nBottom, boundingSphereCenter) > boundingSphereRadius) {
+                            root->visible = false;
+                        } else if (QVector3D::dotProduct(nLeft, boundingSphereCenter) > boundingSphereRadius) {
+                            root->visible = false;
+                        } else if (QVector3D::dotProduct(nRight, boundingSphereCenter) > boundingSphereRadius) {
+                            root->visible = false;
+                        } else {
+                            root->visible = true;
+                        }
+                    }
+                });
+            }
+            if (occlusionCullingCHC) {
+                // occlusion culling
+                frontToBack(kdTreeRoot, eye, [&](Node* node) {
+                    if (node->visible && !node->isLeaf) {
+                        return;
+                    }
+                    if (node->visible && node->isLeaf) {
+                        OcclusionQuery* query = new OcclusionQuery(node);
+                        query->start(projectionMatrix, viewMatrix);
+                        vQueries.push_back(query);
 
-            if (cell == GridCell::WALL) {
-                _prg.setUniformValue("color", QVector3D(1.0f, 0.0f, 0.0f));
-                glBindVertexArray(_vaoWall);
-                glDrawElements(GL_TRIANGLES, _vaoIndicesWall, GL_UNSIGNED_INT, 0);
-            } else if (cell == GridCell::EMPTY) {
-                _prg.setUniformValue("color", QVector3D(0.5f, 0.5f, 0.5f));
-                glBindVertexArray(_vaoFloor);
-                glDrawElements(GL_TRIANGLES, _vaoIndicesFloor, GL_UNSIGNED_INT, 0);
-            } else if (cell == GridCell::FINISH) {
-                _prg.setUniformValue("color", QVector3D(0.0f, 1.0f, 0.0f));
-                glBindVertexArray(_vaoFloor);
-                glDrawElements(GL_TRIANGLES, _vaoIndicesFloor, GL_UNSIGNED_INT, 0);
-            } else if (cell == GridCell::SPAWN) {
-                _prg.setUniformValue("color", QVector3D(0.7f, 0.7f, 0.0f));
-                glBindVertexArray(_vaoFloor);
-                glDrawElements(GL_TRIANGLES, _vaoIndicesFloor, GL_UNSIGNED_INT, 0);
+                        // immediately render
+                        auto cell = node->data.type;
+                        float x = node->data.position.x;
+                        float y = node->data.position.y;
+                        QMatrix4x4 modelMatrix;
+                        modelMatrix.translate(x, 1.0f, y);
+                        QMatrix4x4 modelViewMatrix = viewMatrix * modelMatrix;
+                        _prg.setUniformValue("modelview_matrix", modelViewMatrix);
+                        _prg.setUniformValue("view_matrix", viewMatrix);
+                        _prg.setUniformValue("normal_matrix", modelViewMatrix.normalMatrix());
+
+                        glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+                        glDepthMask(GL_TRUE);
+                        glEnable(GL_DEPTH_TEST);
+                        if (cell == GridCell::WALL) {
+                            _prg.setUniformValue("color", QVector3D(1.0f, 0.0f, 0.0f));
+                            glBindVertexArray(_vaoWall);
+                            glDrawElements(GL_TRIANGLES, _vaoIndicesWall, GL_UNSIGNED_INT, 0);
+                        } else if (cell == GridCell::EMPTY) {
+                            _prg.setUniformValue("color", QVector3D(0.5f, 0.5f, 0.5f));
+                            glBindVertexArray(_vaoFloor);
+                            glDrawElements(GL_TRIANGLES, _vaoIndicesFloor, GL_UNSIGNED_INT, 0);
+                        } else if (cell == GridCell::FINISH) {
+                            _prg.setUniformValue("color", QVector3D(0.0f, 1.0f, 0.0f));
+                            glBindVertexArray(_vaoFloor);
+                            glDrawElements(GL_TRIANGLES, _vaoIndicesFloor, GL_UNSIGNED_INT, 0);
+                        } else if (cell == GridCell::SPAWN) {
+                            _prg.setUniformValue("color", QVector3D(0.7f, 0.7f, 0.0f));
+                            glBindVertexArray(_vaoFloor);
+                            glDrawElements(GL_TRIANGLES, _vaoIndicesFloor, GL_UNSIGNED_INT, 0);
+                        }
+                        node->renderedThisFrame = true;
+                    }
+                    if (!node->visible || !node->isLeaf) {
+                        OcclusionQuery* query = new OcclusionQuery(node);
+                        query->start(projectionMatrix, viewMatrix);
+                        iQueries.push_back(query);
+                    }
+                });
+
+                while (!iQueries.empty()) {
+                    for (int i = 0; i < iQueries.size(); i++) {
+                        if (iQueries.at(i)->isAvailable()) {
+                            if (iQueries.at(i)->getResult()) {
+                                if (iQueries.at(i)->getNode()->isLeaf) {
+                                    Node* node = iQueries.at(i)->getNode();
+                                    auto cell = node->data.type;
+                                    float x = node->data.position.x;
+                                    float y = node->data.position.y;
+                                    QMatrix4x4 modelMatrix;
+                                    modelMatrix.translate(x, 1.0f, y);
+                                    QMatrix4x4 modelViewMatrix = viewMatrix * modelMatrix;
+                                    _prg.setUniformValue("modelview_matrix", modelViewMatrix);
+                                    _prg.setUniformValue("view_matrix", viewMatrix);
+                                    _prg.setUniformValue("normal_matrix", modelViewMatrix.normalMatrix());
+
+                                    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+                                    glDepthMask(GL_TRUE);
+                                    glEnable(GL_DEPTH_TEST);
+                                    glEnable(GL_CULL_FACE);
+                                    if (cell == GridCell::WALL) {
+                                        _prg.setUniformValue("color", QVector3D(1.0f, 0.0f, 0.0f));
+                                        glBindVertexArray(_vaoWall);
+                                        glDrawElements(GL_TRIANGLES, _vaoIndicesWall, GL_UNSIGNED_INT, 0);
+                                    } else if (cell == GridCell::EMPTY) {
+                                        _prg.setUniformValue("color", QVector3D(0.5f, 0.5f, 0.5f));
+                                        glBindVertexArray(_vaoFloor);
+                                        glDrawElements(GL_TRIANGLES, _vaoIndicesFloor, GL_UNSIGNED_INT, 0);
+                                    } else if (cell == GridCell::FINISH) {
+                                        _prg.setUniformValue("color", QVector3D(0.0f, 1.0f, 0.0f));
+                                        glBindVertexArray(_vaoFloor);
+                                        glDrawElements(GL_TRIANGLES, _vaoIndicesFloor, GL_UNSIGNED_INT, 0);
+                                    } else if (cell == GridCell::SPAWN) {
+                                        _prg.setUniformValue("color", QVector3D(0.7f, 0.7f, 0.0f));
+                                        glBindVertexArray(_vaoFloor);
+                                        glDrawElements(GL_TRIANGLES, _vaoIndicesFloor, GL_UNSIGNED_INT, 0);
+                                    }
+                                    node->renderedThisFrame = true;
+                                    iQueries.at(i)->getNode()->visible = true;
+                                    delete iQueries.at(i);
+                                    iQueries.erase(iQueries.begin() + i);
+                                } else {
+                                    Node* node = iQueries.at(i)->getNode();
+                                    OcclusionQuery* queryLeft = new OcclusionQuery(node->left);
+                                    OcclusionQuery* queryRight = new OcclusionQuery(node->right);
+                                    queryLeft->start(projectionMatrix, viewMatrix);
+                                    queryRight->start(projectionMatrix, viewMatrix);
+                                    iQueries.push_back(queryLeft);
+                                    iQueries.push_back(queryRight);
+                                    delete iQueries.at(i);
+                                    iQueries.erase(iQueries.begin() + i);
+                                }
+
+                            } else {
+                                Node* node = iQueries.at(i)->getNode();
+                                node->visible = false;
+                                pullUp(node);
+                                delete iQueries.at(i);
+                                iQueries.erase(iQueries.begin() + i);
+                            }
+                        }
+                    }   // end query loop
+                }   // end not empty while loop
+            } else if (occlusionCulling) {
+                frontToBack(kdTreeRoot, eye, [&](Node* node) {
+                    if (node->isLeaf) {
+                        GLuint query;
+                        glGenQueries(1, &query);
+                        glBeginQuery(GL_ANY_SAMPLES_PASSED, query);
+                        auto cell = node->data.type;
+                        float x = node->data.position.x;
+                        float y = node->data.position.y;
+                        
+                        glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
+                        glDepthMask(GL_FALSE);
+                        QMatrix4x4 modelMatrix;
+                        modelMatrix.translate(x, 1.0f, y);
+                        QMatrix4x4 modelViewMatrix = viewMatrix * modelMatrix;
+                        _prg.setUniformValue("modelview_matrix", modelViewMatrix);
+                        _prg.setUniformValue("view_matrix", viewMatrix);
+                        _prg.setUniformValue("normal_matrix", modelViewMatrix.normalMatrix());
+                        if (cell == GridCell::WALL) {
+                            _prg.setUniformValue("color", QVector3D(1.0f, 0.0f, 0.0f));
+                            glBindVertexArray(_vaoWall);
+                            glDrawElements(GL_TRIANGLES, _vaoIndicesWall, GL_UNSIGNED_INT, 0);
+                        } else if (cell == GridCell::EMPTY) {
+                            _prg.setUniformValue("color", QVector3D(0.5f, 0.5f, 0.5f));
+                            glBindVertexArray(_vaoFloor);
+                            glDrawElements(GL_TRIANGLES, _vaoIndicesFloor, GL_UNSIGNED_INT, 0);
+                        } else if (cell == GridCell::FINISH) {
+                            _prg.setUniformValue("color", QVector3D(0.0f, 1.0f, 0.0f));
+                            glBindVertexArray(_vaoFloor);
+                            glDrawElements(GL_TRIANGLES, _vaoIndicesFloor, GL_UNSIGNED_INT, 0);
+                        } else if (cell == GridCell::SPAWN) {
+                            _prg.setUniformValue("color", QVector3D(0.7f, 0.7f, 0.0f));
+                            glBindVertexArray(_vaoFloor);
+                            glDrawElements(GL_TRIANGLES, _vaoIndicesFloor, GL_UNSIGNED_INT, 0);
+                        }
+                        glEndQuery(GL_ANY_SAMPLES_PASSED);
+
+                        glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+                        glDepthMask(GL_TRUE);
+
+                        GLuint available;
+                        do {
+                            glGetQueryObjectuiv(query, GL_QUERY_RESULT_AVAILABLE, &available);
+                        } while (available != GL_TRUE);
+                        GLuint visible;
+                        glGetQueryObjectuiv(query, GL_QUERY_RESULT, &visible);
+                        if (visible == GL_TRUE) {
+                            node->renderedThisFrame = true;
+                            if (cell == GridCell::WALL) {
+                                _prg.setUniformValue("color", QVector3D(1.0f, 0.0f, 0.0f));
+                                glBindVertexArray(_vaoWall);
+                                glDrawElements(GL_TRIANGLES, _vaoIndicesWall, GL_UNSIGNED_INT, 0);
+                            } else if (cell == GridCell::EMPTY) {
+                                _prg.setUniformValue("color", QVector3D(0.5f, 0.5f, 0.5f));
+                                glBindVertexArray(_vaoFloor);
+                                glDrawElements(GL_TRIANGLES, _vaoIndicesFloor, GL_UNSIGNED_INT, 0);
+                            } else if (cell == GridCell::FINISH) {
+                                _prg.setUniformValue("color", QVector3D(0.0f, 1.0f, 0.0f));
+                                glBindVertexArray(_vaoFloor);
+                                glDrawElements(GL_TRIANGLES, _vaoIndicesFloor, GL_UNSIGNED_INT, 0);
+                            } else if (cell == GridCell::SPAWN) {
+                                _prg.setUniformValue("color", QVector3D(0.7f, 0.7f, 0.0f));
+                                glBindVertexArray(_vaoFloor);
+                                glDrawElements(GL_TRIANGLES, _vaoIndicesFloor, GL_UNSIGNED_INT, 0);
+                            }
+                        }
+                    }
+                });
+            } else {
+                frontToBack(kdTreeRoot, eye, [&](Node* root){
+                    if (root->isLeaf) {
+                        auto cell = root->data.type;
+                        float x = root->data.position.x;
+                        float y = root->data.position.y;
+                        if (root->visible) {
+                            QMatrix4x4 modelMatrix;
+                            modelMatrix.translate(x, 1.0f, y);
+                            QMatrix4x4 modelViewMatrix = viewMatrix * modelMatrix;
+                            _prg.setUniformValue("modelview_matrix", modelViewMatrix);
+                            _prg.setUniformValue("view_matrix", viewMatrix);
+                            _prg.setUniformValue("normal_matrix", modelViewMatrix.normalMatrix());
+                            root->renderedThisFrame = true;
+                            if (cell == GridCell::WALL) {
+                                _prg.setUniformValue("color", QVector3D(1.0f, 0.0f, 0.0f));
+                                glBindVertexArray(_vaoWall);
+                                glDrawElements(GL_TRIANGLES, _vaoIndicesWall, GL_UNSIGNED_INT, 0);
+                            } else if (cell == GridCell::EMPTY) {
+                                _prg.setUniformValue("color", QVector3D(0.5f, 0.5f, 0.5f));
+                                glBindVertexArray(_vaoFloor);
+                                glDrawElements(GL_TRIANGLES, _vaoIndicesFloor, GL_UNSIGNED_INT, 0);
+                            } else if (cell == GridCell::FINISH) {
+                                _prg.setUniformValue("color", QVector3D(0.0f, 1.0f, 0.0f));
+                                glBindVertexArray(_vaoFloor);
+                                glDrawElements(GL_TRIANGLES, _vaoIndicesFloor, GL_UNSIGNED_INT, 0);
+                            } else if (cell == GridCell::SPAWN) {
+                                _prg.setUniformValue("color", QVector3D(0.7f, 0.7f, 0.0f));
+                                glBindVertexArray(_vaoFloor);
+                                glDrawElements(GL_TRIANGLES, _vaoIndicesFloor, GL_UNSIGNED_INT, 0);
+                            }
+                        }
+                    }
+                });
             }
         }
+        
     }
-
-    renderTree(root->left, viewMatrix);
-    renderTree(root->right, viewMatrix);
 }
 
 void MazeApp::update(const QList<QVRObserver*>& observers)
@@ -371,6 +563,26 @@ void MazeApp::keyPressEvent(const QVRRenderContext& /* context */, QKeyEvent* ev
     case Qt::Key_Escape:
         _wantExit = true;
         break;
+    case Qt::Key_P:
+        if (occlusionCulling) occlusionCulling = false;
+        occlusionCullingCHC = !occlusionCullingCHC;
+        inOrder(kdTreeRoot, [](Node* node) {
+            node->visible = true;
+        });
+        break;
+    case Qt::Key_O:
+        if (occlusionCullingCHC) occlusionCullingCHC = false;
+        occlusionCulling = !occlusionCulling;
+        inOrder(kdTreeRoot, [](Node* node) {
+            node->visible = true;
+        });
+        break;
+    case Qt::Key_F:
+        frustumCulling = !frustumCulling;
+        inOrder(kdTreeRoot, [](Node* node) {
+            node->visible = true;
+        });
+        break;
     }
 }
 
@@ -386,7 +598,7 @@ int main(int argc, char* argv[])
     QVRManager manager(argc, argv);
     QSurfaceFormat format;
     format.setProfile(QSurfaceFormat::CoreProfile);
-    format.setVersion(3,3);
+    format.setVersion(4,5);
     QSurfaceFormat::setDefaultFormat(format);
 
     /* Then start QVR with the app */
@@ -408,6 +620,8 @@ Node* kdTree(std::vector<RenderObject>& objects, int depth)
         Node* root = new Node;
         root->data = objects.at(0);
         root->isLeaf = true;
+        root->visible = true;
+        root->depth = depth;
         root->left = nullptr;
         root->right = nullptr;
         return root;
@@ -424,7 +638,9 @@ Node* kdTree(std::vector<RenderObject>& objects, int depth)
     RenderObject median = objects.at(objects.size() / 2);
     Node* root = new Node;
     root->axis = axis;
+    root->depth = depth;
     root->isLeaf = false;
+    root->visible = false;
     if (axis == 0) {
         root->border = median.position.x;
     } else {
@@ -433,8 +649,58 @@ Node* kdTree(std::vector<RenderObject>& objects, int depth)
     std::vector<RenderObject> left(&objects[0], &objects[objects.size() / 2]);
     std::vector<RenderObject> right(&objects[objects.size() / 2], &objects.back() + 1);
     root->left = kdTree(left, depth + 1);
+    if (root->left) {
+        root->left->parent = root;
+    }
     root->right = kdTree(right, depth + 1);
+    if (root->right) {
+        root->right->parent = root;
+    }
     return root;
+}
+
+void calcBorders(Node* root)
+{
+    if (root == nullptr || root->isLeaf) return;
+    if (root->parent == nullptr) {
+        root->xMin = -32.0f;
+        root->xMax = 32.0f;
+        root->yMin = -32.0f;
+        root->yMax = 32.0f;
+        root->centerX = root->xMin + (root->xMax - root->xMin) / 2.0f;
+        root->centerY = root->yMin + (root->yMax - root->yMin) / 2.0f;
+    } else {
+        Node* parent = root->parent;
+        if (parent->axis == 0) {
+            if (parent->left == root) {
+                root->xMax = parent->border;
+                root->xMin = parent->xMin;
+                root->yMax = parent->yMax;
+                root->yMin = parent->yMin;
+            } else {
+                root->xMax = parent->xMax;
+                root->xMin = parent->border;
+                root->yMax = parent->yMax;
+                root->yMin = parent->yMin;
+            }
+        } else {
+            if (parent->left == root) {
+                root->xMax = parent->xMax;
+                root->xMin = parent->xMin;
+                root->yMax = parent->border;
+                root->yMin = parent->yMin;
+            } else {
+                root->xMax = parent->xMax;
+                root->xMin = parent->xMin;
+                root->yMax = parent->yMax;
+                root->yMin = parent->border;
+            }
+        }
+        root->centerX = root->xMin + (root->xMax - root->xMin) / 2.0f;
+        root->centerY = root->yMin + (root->yMax - root->yMin) / 2.0f;
+    }
+    calcBorders(root->left);
+    calcBorders(root->right);
 }
 
 void freeTree(Node* root)
@@ -447,3 +713,25 @@ void freeTree(Node* root)
     delete root;
     root = nullptr;
 }
+
+void pullUp(Node* node)
+{
+    if (node == nullptr || node->parent == nullptr) return;
+    if (!node->visible) {
+        if (node->parent->left == node) {
+            if (!node->parent->right->visible) {
+                node->parent->visible = false;
+                pullUp(node->parent);
+            }
+        } else {
+            if (!node->parent->left->visible) {
+                node->parent->visible = false;
+                pullUp(node->parent);
+            }
+        }
+    }
+}
+
+GLuint OcclusionQuery::vao;
+QOpenGLShaderProgram OcclusionQuery::prg;
+unsigned int OcclusionQuery::vaoIndices;
