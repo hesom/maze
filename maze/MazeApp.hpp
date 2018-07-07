@@ -1,28 +1,4 @@
-/*
- * Copyright (C) 2016, 2017 Computer Graphics Group, University of Siegen
- * Written by Martin Lambers <martin.lambers@uni-siegen.de>
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
- */
-
-#ifndef QVR_EXAMPLE_OPENGL_MINIMAL_HPP
-#define QVR_EXAMPLE_OPENGL_MINIMAL_HPP
+#pragma once
 
 #include <QOpenGLShaderProgram>
 #include <QOpenGLFunctions_4_5_Core>
@@ -157,12 +133,13 @@ public:
         glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
         //glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
         glDepthMask(GL_FALSE);
+        glDisable(GL_CULL_FACE);
         glBindVertexArray(vao);
         glUseProgram(prg.programId());
         QMatrix4x4 modelMatrix;
         if (!node->isLeaf) {
-            float scaleX = (node->xMin - node->xMax) / 2.0f;
-            float scaleY = (node->yMin - node->yMax) / 2.0f;
+            float scaleX = (node->xMax - node->xMin)/2.0f;
+            float scaleY = (node->yMax - node->yMin)/2.0f;
             modelMatrix.translate(node->centerX, 1.0f, node->centerY);
             modelMatrix.scale(scaleX, 1.0f, scaleY);
         } else {
@@ -212,7 +189,7 @@ void frontToBack(Node* root, QVector3D eye, Func f)
 {
     if (root == nullptr) return;
 
-    f(root);
+    bool stop = f(root);
     int axis = root->axis;
     bool positive;
     if (axis == 0) {
@@ -220,10 +197,10 @@ void frontToBack(Node* root, QVector3D eye, Func f)
     } else {
         positive = eye.y() < root->border;
     }
-    if (positive) {
+    if (positive && !stop) {
         frontToBack<Func>(root->left, eye, f);
         frontToBack<Func>(root->right, eye, f);
-    } else {
+    } else if(!positive && !stop){
         frontToBack<Func>(root->right, eye, f);
         frontToBack<Func>(root->left, eye, f);
     }
@@ -262,6 +239,8 @@ private:
     bool frustumCulling = false;
     bool occlusionCullingCHC = false;
     bool occlusionCulling = false; 
+    bool chcDebug = false;
+    int debugLevel = 0;
     std::vector<RenderObject> renderQueue;
     std::vector<OcclusionQuery*> vQueries;
     std::vector<OcclusionQuery*> iQueries;
@@ -295,5 +274,3 @@ public:
         return mazeGrid[row * gridWidth + col];
     }
 };
-
-#endif

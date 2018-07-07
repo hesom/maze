@@ -1,25 +1,3 @@
-/*
- * Copyright (C) 2016, 2017 Computer Graphics Group, University of Siegen
- * Written by Martin Lambers <martin.lambers@uni-siegen.de>
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
- */
 #include <iostream>
 #include <queue>
 
@@ -85,8 +63,8 @@ bool MazeApp::initProcess(QVRProcess* p)
     for (int row = 0; row < gridWidth; row++) {
         for (int col = 0; col < gridHeight; col++) {
             RenderObject object;
-            float x = -((float)gridWidth) + 2.0f * col;
-            float y = ((float)gridHeight) - 2.0f * row;
+            float x = -((float)gridWidth)+1.0f + 2.0f * col;
+            float y = ((float)gridHeight)-1.0f - 2.0f * row;
             object.position = Point(x, y);
             object.type = GetCell(row, col);
             renderQueue.push_back(object);
@@ -221,6 +199,10 @@ void MazeApp::render(QVRWindow*  w ,
             projectionMatrix.ortho(-40.0f, 40.0f, -40.0f, 40.0f, 0.1f, 100.0f);
             _prg.setUniformValue("projection_matrix", projectionMatrix);
             viewMatrix.lookAt(QVector3D(0.0f, 10.0f, 0.0f), QVector3D(0.0f, 0.0f, 0.0f), QVector3D(-1.0f, 0.0f, 0.0f));
+            glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+            glDepthMask(GL_TRUE);
+            glEnable(GL_DEPTH_TEST);
+            glDisable(GL_CULL_FACE);
             inOrder(kdTreeRoot, [&](Node* node) {
                 if (node->renderedThisFrame) {
                     // immediately render
@@ -255,6 +237,30 @@ void MazeApp::render(QVRWindow*  w ,
                         glDrawElements(GL_TRIANGLES, _vaoIndicesFloor, GL_UNSIGNED_INT, 0);
                     }
                 }
+
+                if (chcDebug && node->depth == debugLevel && node->visible) {
+                    glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+                    QMatrix4x4 modelMatrix;
+                    if (!node->isLeaf) {
+                        float scaleX = (node->xMax - node->xMin) / 2.0f;
+                        float scaleY = (node->yMax - node->yMin) / 2.0f;
+                        modelMatrix.translate(node->centerX, 10.0f, node->centerY);
+                        modelMatrix.scale(scaleX, 1.0f, scaleY);
+                    } else {
+                        float x = node->data.position.x;
+                        float y = node->data.position.y;
+                        modelMatrix.translate(x, 10.0f, y);
+                    }
+                    QMatrix4x4 modelViewMatrix = viewMatrix * modelMatrix;
+                    _prg.setUniformValue("projection_matrix", projectionMatrix);
+                    _prg.setUniformValue("modelview_matrix", modelViewMatrix);
+                    _prg.setUniformValue("view_matrix", viewMatrix);
+                    _prg.setUniformValue("normal_matrix", modelViewMatrix.normalMatrix());
+                    _prg.setUniformValue("color", QVector3D(0.0f, 1.0f, 0.0f));
+                    glBindVertexArray(_vaoWall);
+                    glDrawElements(GL_TRIANGLES, _vaoIndicesWall, GL_UNSIGNED_INT, 0);
+                    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+                }
             });
         } else {
             projectionMatrix = context.frustum(view).toMatrix4x4();
@@ -275,6 +281,9 @@ void MazeApp::render(QVRWindow*  w ,
                 } else {
                     vQueries.at(i)->getNode()->visible = false;
                     pullUp(vQueries.at(i)->getNode());
+                    inOrder(vQueries.at(i)->getNode(), [](Node* node) {
+                        node->visible = false;
+                    });
                 }
                 delete vQueries.at(i);
                 vQueries.erase(vQueries.begin() + i);
@@ -317,7 +326,7 @@ void MazeApp::render(QVRWindow*  w ,
                 // occlusion culling
                 frontToBack(kdTreeRoot, eye, [&](Node* node) {
                     if (node->visible && !node->isLeaf) {
-                        return;
+                        return false;
                     }
                     if (node->visible && node->isLeaf) {
                         OcclusionQuery* query = new OcclusionQuery(node);
@@ -356,20 +365,22 @@ void MazeApp::render(QVRWindow*  w ,
                             glDrawElements(GL_TRIANGLES, _vaoIndicesFloor, GL_UNSIGNED_INT, 0);
                         }
                         node->renderedThisFrame = true;
+                        return true;
                     }
-                    if (!node->visible || !node->isLeaf) {
+                    if (!node->visible) {
                         OcclusionQuery* query = new OcclusionQuery(node);
                         query->start(projectionMatrix, viewMatrix);
                         iQueries.push_back(query);
+                        return true;
                     }
                 });
 
                 while (!iQueries.empty()) {
-                    for (int i = 0; i < iQueries.size(); i++) {
-                        if (iQueries.at(i)->isAvailable()) {
-                            if (iQueries.at(i)->getResult()) {
-                                if (iQueries.at(i)->getNode()->isLeaf) {
-                                    Node* node = iQueries.at(i)->getNode();
+                    for (auto it = iQueries.begin(); it < iQueries.end();) {
+                        if ((*it)->isAvailable()) { // available?
+                            if ((*it)->getResult()) {   // visible?
+                                if ((*it)->getNode()->isLeaf) {
+                                    Node* node = (*it)->getNode();
                                     auto cell = node->data.type;
                                     float x = node->data.position.x;
                                     float y = node->data.position.y;
@@ -402,28 +413,34 @@ void MazeApp::render(QVRWindow*  w ,
                                         glDrawElements(GL_TRIANGLES, _vaoIndicesFloor, GL_UNSIGNED_INT, 0);
                                     }
                                     node->renderedThisFrame = true;
-                                    iQueries.at(i)->getNode()->visible = true;
-                                    delete iQueries.at(i);
-                                    iQueries.erase(iQueries.begin() + i);
+                                    (*it)->getNode()->visible = true;
+                                    delete (*it);
+                                    it = iQueries.erase(it);
                                 } else {
-                                    Node* node = iQueries.at(i)->getNode();
+                                    Node* node =(*it)->getNode();
                                     OcclusionQuery* queryLeft = new OcclusionQuery(node->left);
                                     OcclusionQuery* queryRight = new OcclusionQuery(node->right);
+                                    node->visible = true;
                                     queryLeft->start(projectionMatrix, viewMatrix);
                                     queryRight->start(projectionMatrix, viewMatrix);
                                     iQueries.push_back(queryLeft);
                                     iQueries.push_back(queryRight);
-                                    delete iQueries.at(i);
-                                    iQueries.erase(iQueries.begin() + i);
+                                    delete (*it);
+                                    it = iQueries.erase(it);
                                 }
 
-                            } else {
-                                Node* node = iQueries.at(i)->getNode();
+                            } else {    // not visible
+                                Node* node = (*it)->getNode();
                                 node->visible = false;
                                 pullUp(node);
-                                delete iQueries.at(i);
-                                iQueries.erase(iQueries.begin() + i);
+                                inOrder(node, [](Node* node) {
+                                    node->visible = false;
+                                });
+                                delete (*it);
+                                it = iQueries.erase(it);
                             }
+                        } else {    // not available yet
+                            it++;
                         }
                     }   // end query loop
                 }   // end not empty while loop
@@ -439,6 +456,7 @@ void MazeApp::render(QVRWindow*  w ,
                         
                         glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
                         glDepthMask(GL_FALSE);
+                        glEnable(GL_CULL_FACE);
                         QMatrix4x4 modelMatrix;
                         modelMatrix.translate(x, 1.0f, y);
                         QMatrix4x4 modelViewMatrix = viewMatrix * modelMatrix;
@@ -473,6 +491,7 @@ void MazeApp::render(QVRWindow*  w ,
                         } while (available != GL_TRUE);
                         GLuint visible;
                         glGetQueryObjectuiv(query, GL_QUERY_RESULT, &visible);
+                        glDeleteQueries(1, &query);
                         if (visible == GL_TRUE) {
                             node->renderedThisFrame = true;
                             if (cell == GridCell::WALL) {
@@ -494,10 +513,12 @@ void MazeApp::render(QVRWindow*  w ,
                             }
                         }
                     }
+                    return false;
                 });
             } else {
                 frontToBack(kdTreeRoot, eye, [&](Node* root){
                     if (root->isLeaf) {
+                        glEnable(GL_CULL_FACE);
                         auto cell = root->data.type;
                         float x = root->data.position.x;
                         float y = root->data.position.y;
@@ -528,6 +549,7 @@ void MazeApp::render(QVRWindow*  w ,
                             }
                         }
                     }
+                    return false;
                 });
             }
         }
@@ -583,6 +605,30 @@ void MazeApp::keyPressEvent(const QVRRenderContext& /* context */, QKeyEvent* ev
             node->visible = true;
         });
         break;
+    case Qt::Key_G:
+        chcDebug = false;
+        break;
+    case Qt::Key_Plus:
+        debugLevel++;
+        if (debugLevel > 10)
+            debugLevel = 10;
+        chcDebug = true;
+        break;
+    case Qt::Key_Minus:
+        debugLevel--;
+        if (debugLevel < 0)
+            debugLevel = 0;
+        chcDebug = true;
+        break;
+    }
+
+    if (event->key() > Qt::Key_0 && event->key() <= Qt::Key_9) {
+        debugLevel = event->key() - Qt::Key_0;
+        chcDebug = true;
+    }
+    if (event->key() == Qt::Key_0) {
+        debugLevel = 10;
+        chcDebug = true;
     }
 }
 
@@ -641,11 +687,21 @@ Node* kdTree(std::vector<RenderObject>& objects, int depth)
     root->depth = depth;
     root->isLeaf = false;
     root->visible = false;
-    if (axis == 0) {
-        root->border = median.position.x;
+    if (objects.size() % 2 != 0) {
+        if (axis == 0) {
+            root->border = median.position.x;
+        } else {
+            root->border = median.position.y;
+        }
     } else {
-        root->border = median.position.y;
+        RenderObject median2 = objects.at(objects.size() / 2 - 1);
+        if (axis == 0) {
+            root->border = (median.position.x + median2.position.x) / 2.0f;
+        } else {
+            root->border = (median.position.y + median2.position.y) / 2.0f;
+        }
     }
+    
     std::vector<RenderObject> left(&objects[0], &objects[objects.size() / 2]);
     std::vector<RenderObject> right(&objects[objects.size() / 2], &objects.back() + 1);
     root->left = kdTree(left, depth + 1);
