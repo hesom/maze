@@ -171,7 +171,7 @@ bool MazeApp::initProcess(QVRProcess* p)
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(floorIndices), floorIndices, GL_STATIC_DRAW);
     _vaoIndicesFloor = 6;
 
-    std::string inputfile = "goldCoin.obj";
+    std::string inputfile = "goldCoin.wavefront";
     tinyobj::attrib_t attrib;
     std::vector<tinyobj::shape_t> shapes;
     std::vector<tinyobj::material_t> materials;
