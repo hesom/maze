@@ -800,6 +800,12 @@ void MazeApp::update(const QList<QVRObserver*>& observers)
                     // collect coin
                     object.type = GridCell::EMPTY;
                     coinsLeft--;
+                    for (int i = 0; i < deviceCount; i++) {
+                        auto device = QVRManager::device(i);
+                        if (device.supportsHapticPulse()) {
+                            device.triggerHapticPulse(1000);
+                        }
+                    }
                 }
             }
             return false;
