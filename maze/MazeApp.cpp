@@ -720,8 +720,9 @@ void MazeApp::render(QVRWindow*  w ,
 
 void MazeApp::update(const QList<QVRObserver*>& observers)
 {
-    constexpr float runSpeed = 3.5f;
+    constexpr float runSpeed = 5.0f;
     constexpr float hitbox = 0.1f;  // you are a 20 cm wide cylinder
+    constexpr float collectionRange = 0.3f;
     constexpr float sensitivity = 0.5f; // mouse sensitivity
     constexpr float wallRadius = 1.0f;
     constexpr float coinSpeed = 100.0f;
@@ -795,7 +796,7 @@ void MazeApp::update(const QList<QVRObserver*>& observers)
             if (object.type == GridCell::COIN) {
                 auto coinPos = object.position;
                 auto dist = (coinPos.x - position.x())*(coinPos.x - position.x()) + (coinPos.y - position.z())*(coinPos.y - position.z());
-                if (dist < (coinBoundingSphere + hitbox) * (coinBoundingSphere+hitbox)) {
+                if (dist < (coinBoundingSphere + collectionRange) * (coinBoundingSphere + collectionRange)) {
                     // collect coin
                     object.type = GridCell::EMPTY;
                     coinsLeft--;
