@@ -15,7 +15,9 @@ enum class GridCell : int
     EMPTY,
     WALL,
     FINISH,
-    SPAWN
+    SPAWN,
+    COIN,
+    DOOR
 };
 
 struct Point
@@ -233,10 +235,14 @@ private:
     unsigned int _vaoFloor;
     unsigned int _vaoIndicesFloor;
     unsigned int _vaoCoin;
+    unsigned int _coinSize;
     QOpenGLShaderProgram _prg;  // Shader program for rendering
     GridCell* mazeGrid;    // 0 = nothing, 1 = wall, 2 = finish, (3 = spawn)
     size_t gridWidth;
     size_t gridHeight;
+    int coinsLeft = 0;
+    float coinBoundingSphere = 0;
+    float coinRotation = 0.0f;
     bool frustumCulling = false;
     bool occlusionCullingCHC = false;
     bool occlusionCulling = false; 
@@ -248,8 +254,6 @@ private:
     bool backwardPressed = false;
     QPoint mousePosLastFrame;
     QVector2D mouseDx;
-    QVector3D oldNavigationPosition;
-    QVector3D oldTrackingPosition;
     std::vector<RenderObject> renderQueue;
     std::vector<OcclusionQuery*> vQueries;
     std::vector<OcclusionQuery*> iQueries;

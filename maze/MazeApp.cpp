@@ -59,6 +59,11 @@ bool MazeApp::initProcess(QVRProcess* p)
             mazeGrid[cell] = GridCell::FINISH;
         } else if (!red && !green && !blue) {
             mazeGrid[cell] = GridCell::SPAWN;
+        } else if (red && green && !blue) {
+            mazeGrid[cell] = GridCell::COIN;
+            coinsLeft++;
+        } else if (!red && !green && blue) {
+            mazeGrid[cell] = GridCell::DOOR;
         }
     }
     stbi_image_free(mazeImage);
@@ -183,30 +188,35 @@ bool MazeApp::initProcess(QVRProcess* p)
 
     std::vector<float> vertices;
     std::vector<float> normals;
+    std::vector<unsigned int> indices;
 
-    for (size_t s = 0; s < shapes.size(); s++) {
-        size_t index_offset = 0;
-        for (size_t f = 0; f < shapes[s].mesh.num_face_vertices.size(); f++) {
-            int fv = shapes[s].mesh.num_face_vertices[f];
+    for (const auto& shape : shapes) {
+        for (const auto& index : shape.mesh.indices) {
+            float vx = attrib.vertices[3 * index.vertex_index + 0];
+            float vy = attrib.vertices[3 * index.vertex_index + 1];
+            float vz = attrib.vertices[3 * index.vertex_index + 2];
+            float nx = attrib.normals[3 * index.normal_index + 0];
+            float ny = attrib.normals[3 * index.normal_index + 1];
+            float nz = attrib.normals[3 * index.normal_index + 2];
 
-            for (size_t v = 0; v < fv; v++) {
-                tinyobj::index_t idx = shapes[s].mesh.indices[index_offset + v];
-                tinyobj::real_t vx = attrib.vertices[3 * idx.vertex_index + 0];
-                tinyobj::real_t vy = attrib.vertices[3 * idx.vertex_index + 1];
-                tinyobj::real_t vz = attrib.vertices[3 * idx.vertex_index + 2];
-                tinyobj::real_t nx = attrib.vertices[3 * idx.normal_index + 0];
-                tinyobj::real_t ny = attrib.vertices[3 * idx.normal_index + 1];
-                tinyobj::real_t nz = attrib.vertices[3 * idx.normal_index + 2];
-
-                vertices.push_back(vx);
-                vertices.push_back(vy);
-                vertices.push_back(vz);
-                normals.push_back(nx);
-                normals.push_back(ny);
-                normals.push_back(nz);
-            }
+            vertices.push_back(vx);
+            vertices.push_back(vy);
+            vertices.push_back(vz);
+            normals.push_back(nx);
+            normals.push_back(ny);
+            normals.push_back(nz);
+            
+            indices.push_back(indices.size());
         }
     }
+
+    for (const auto& coord : vertices) {
+        if (std::abs(coord) > coinBoundingSphere) {
+            coinBoundingSphere = std::abs(coord);
+        }
+    }
+
+    coinBoundingSphere *= 2.0f;
 
     glGenVertexArrays(1, &_vaoCoin);
     glBindVertexArray(_vaoCoin);
@@ -219,6 +229,15 @@ bool MazeApp::initProcess(QVRProcess* p)
     GLuint coinNormalBuffer;
     glGenBuffers(1, &coinNormalBuffer);
     glBindBuffer(GL_ARRAY_BUFFER, coinNormalBuffer);
+    glBufferData(GL_ARRAY_BUFFER, normals.size() * sizeof(float), normals.data(), GL_STATIC_DRAW);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_TRUE, 0, 0);
+    glEnableVertexAttribArray(1);
+
+    GLuint coinIndexBuffer;
+    glGenBuffers(1, &coinIndexBuffer);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, coinIndexBuffer);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), indices.data(), GL_STATIC_DRAW);
+    _coinSize = indices.size();
 
     // Shader program
     _prg.addShaderFromSourceFile(QOpenGLShader::Vertex, ":vertex-shader.glsl");
@@ -295,6 +314,20 @@ void MazeApp::render(QVRWindow*  w ,
                         _prg.setUniformValue("color", QVector3D(0.7f, 0.7f, 0.0f));
                         glBindVertexArray(_vaoFloor);
                         glDrawElements(GL_TRIANGLES, _vaoIndicesFloor, GL_UNSIGNED_INT, 0);
+                    } else if (cell == GridCell::COIN) {
+                        _prg.setUniformValue("color", QVector3D(0.5f, 0.5f, 0.5f));
+                        glBindVertexArray(_vaoFloor);
+                        glDrawElements(GL_TRIANGLES, _vaoIndicesFloor, GL_UNSIGNED_INT, 0);
+                        modelMatrix.setToIdentity();
+                        modelMatrix.translate(x, 1.0f, y);
+                        modelMatrix.scale(2.0f);
+                        modelViewMatrix = viewMatrix * modelMatrix;
+                        _prg.setUniformValue("modelview_matrix", modelViewMatrix);
+                        _prg.setUniformValue("view_matrix", viewMatrix);
+                        _prg.setUniformValue("normal_matrix", modelViewMatrix.normalMatrix());
+                        _prg.setUniformValue("color", QVector3D(1.0f, 1.0f, 0.0f));
+                        glBindVertexArray(_vaoCoin);
+                        glDrawElements(GL_TRIANGLES, _coinSize, GL_UNSIGNED_INT, 0);
                     }
                 }
 
@@ -423,6 +456,26 @@ void MazeApp::render(QVRWindow*  w ,
                             _prg.setUniformValue("color", QVector3D(0.7f, 0.7f, 0.0f));
                             glBindVertexArray(_vaoFloor);
                             glDrawElements(GL_TRIANGLES, _vaoIndicesFloor, GL_UNSIGNED_INT, 0);
+                        } else if (cell == GridCell::COIN) {
+                            _prg.setUniformValue("color", QVector3D(0.5f, 0.5f, 0.5f));
+                            glBindVertexArray(_vaoFloor);
+                            glDrawElements(GL_TRIANGLES, _vaoIndicesFloor, GL_UNSIGNED_INT, 0);
+                            modelMatrix.setToIdentity();
+                            modelMatrix.translate(x, 1.0f, y);
+                            modelMatrix.rotate(90.0f, 1.0f, 0.0f, 0.0f);
+                            modelMatrix.rotate(coinRotation, 0.0f, 0.0f, 1.0f);
+                            modelMatrix.scale(2.0f);
+                            modelViewMatrix = viewMatrix * modelMatrix;
+                            _prg.setUniformValue("modelview_matrix", modelViewMatrix);
+                            _prg.setUniformValue("view_matrix", viewMatrix);
+                            _prg.setUniformValue("normal_matrix", modelViewMatrix.normalMatrix());
+                            _prg.setUniformValue("color", QVector3D(1.0f, 1.0f, 0.0f));
+                            glBindVertexArray(_vaoCoin);
+                            glDrawElements(GL_TRIANGLES, _coinSize, GL_UNSIGNED_INT, 0);
+                        } else if (cell == GridCell::DOOR) {
+                            _prg.setUniformValue("color", QVector3D(0.0f, 0.0f, 1.0f));
+                            glBindVertexArray(_vaoWall);
+                            glDrawElements(GL_TRIANGLES, _vaoIndicesWall, GL_UNSIGNED_INT, 0);
                         }
                         node->renderedThisFrame = true;
                         return true;
@@ -472,6 +525,26 @@ void MazeApp::render(QVRWindow*  w ,
                                         _prg.setUniformValue("color", QVector3D(0.7f, 0.7f, 0.0f));
                                         glBindVertexArray(_vaoFloor);
                                         glDrawElements(GL_TRIANGLES, _vaoIndicesFloor, GL_UNSIGNED_INT, 0);
+                                    } else if (cell == GridCell::COIN) {
+                                        _prg.setUniformValue("color", QVector3D(0.5f, 0.5f, 0.5f));
+                                        glBindVertexArray(_vaoFloor);
+                                        glDrawElements(GL_TRIANGLES, _vaoIndicesFloor, GL_UNSIGNED_INT, 0);
+                                        modelMatrix.setToIdentity();
+                                        modelMatrix.translate(x, 1.0f, y);
+                                        modelMatrix.rotate(90.0f, 1.0f, 0.0f, 0.0f);
+                                        modelMatrix.rotate(coinRotation, 0.0f, 0.0f, 1.0f);
+                                        modelMatrix.scale(2.0f);
+                                        modelViewMatrix = viewMatrix * modelMatrix;
+                                        _prg.setUniformValue("modelview_matrix", modelViewMatrix);
+                                        _prg.setUniformValue("view_matrix", viewMatrix);
+                                        _prg.setUniformValue("normal_matrix", modelViewMatrix.normalMatrix());
+                                        _prg.setUniformValue("color", QVector3D(1.0f, 1.0f, 0.0f));
+                                        glBindVertexArray(_vaoCoin);
+                                        glDrawElements(GL_TRIANGLES, _coinSize, GL_UNSIGNED_INT, 0);
+                                    } else if (cell == GridCell::DOOR) {
+                                        _prg.setUniformValue("color", QVector3D(0.0f, 0.0f, 1.0f));
+                                        glBindVertexArray(_vaoWall);
+                                        glDrawElements(GL_TRIANGLES, _vaoIndicesWall, GL_UNSIGNED_INT, 0);
                                     }
                                     node->renderedThisFrame = true;
                                     (*it)->getNode()->visible = true;
@@ -524,23 +597,9 @@ void MazeApp::render(QVRWindow*  w ,
                         _prg.setUniformValue("modelview_matrix", modelViewMatrix);
                         _prg.setUniformValue("view_matrix", viewMatrix);
                         _prg.setUniformValue("normal_matrix", modelViewMatrix.normalMatrix());
-                        if (cell == GridCell::WALL) {
-                            _prg.setUniformValue("color", QVector3D(1.0f, 0.0f, 0.0f));
-                            glBindVertexArray(_vaoWall);
-                            glDrawElements(GL_TRIANGLES, _vaoIndicesWall, GL_UNSIGNED_INT, 0);
-                        } else if (cell == GridCell::EMPTY) {
-                            _prg.setUniformValue("color", QVector3D(0.5f, 0.5f, 0.5f));
-                            glBindVertexArray(_vaoFloor);
-                            glDrawElements(GL_TRIANGLES, _vaoIndicesFloor, GL_UNSIGNED_INT, 0);
-                        } else if (cell == GridCell::FINISH) {
-                            _prg.setUniformValue("color", QVector3D(0.0f, 1.0f, 0.0f));
-                            glBindVertexArray(_vaoFloor);
-                            glDrawElements(GL_TRIANGLES, _vaoIndicesFloor, GL_UNSIGNED_INT, 0);
-                        } else if (cell == GridCell::SPAWN) {
-                            _prg.setUniformValue("color", QVector3D(0.7f, 0.7f, 0.0f));
-                            glBindVertexArray(_vaoFloor);
-                            glDrawElements(GL_TRIANGLES, _vaoIndicesFloor, GL_UNSIGNED_INT, 0);
-                        }
+                        _prg.setUniformValue("color", QVector3D(1.0f, 0.0f, 0.0f));
+                        glBindVertexArray(_vaoWall);
+                        glDrawElements(GL_TRIANGLES, _vaoIndicesWall, GL_UNSIGNED_INT, 0);
                         glEndQuery(GL_ANY_SAMPLES_PASSED);
 
                         glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
@@ -571,6 +630,26 @@ void MazeApp::render(QVRWindow*  w ,
                                 _prg.setUniformValue("color", QVector3D(0.7f, 0.7f, 0.0f));
                                 glBindVertexArray(_vaoFloor);
                                 glDrawElements(GL_TRIANGLES, _vaoIndicesFloor, GL_UNSIGNED_INT, 0);
+                            } else if (cell == GridCell::COIN) {
+                                _prg.setUniformValue("color", QVector3D(0.5f, 0.5f, 0.5f));
+                                glBindVertexArray(_vaoFloor);
+                                glDrawElements(GL_TRIANGLES, _vaoIndicesFloor, GL_UNSIGNED_INT, 0);
+                                modelMatrix.setToIdentity();
+                                modelMatrix.translate(x, 1.0f, y);
+                                modelMatrix.rotate(90.0f, 1.0f, 0.0f, 0.0f);
+                                modelMatrix.rotate(coinRotation, 0.0f, 0.0f, 1.0f);
+                                modelMatrix.scale(2.0f);
+                                modelViewMatrix = viewMatrix * modelMatrix;
+                                _prg.setUniformValue("modelview_matrix", modelViewMatrix);
+                                _prg.setUniformValue("view_matrix", viewMatrix);
+                                _prg.setUniformValue("normal_matrix", modelViewMatrix.normalMatrix());
+                                _prg.setUniformValue("color", QVector3D(1.0f, 1.0f, 0.0f));
+                                glBindVertexArray(_vaoCoin);
+                                glDrawElements(GL_TRIANGLES, _coinSize, GL_UNSIGNED_INT, 0);
+                            } else if (cell == GridCell::DOOR) {
+                                _prg.setUniformValue("color", QVector3D(0.0f, 0.0f, 1.0f));
+                                glBindVertexArray(_vaoWall);
+                                glDrawElements(GL_TRIANGLES, _vaoIndicesWall, GL_UNSIGNED_INT, 0);
                             }
                         }
                     }
@@ -607,6 +686,27 @@ void MazeApp::render(QVRWindow*  w ,
                                 _prg.setUniformValue("color", QVector3D(0.7f, 0.7f, 0.0f));
                                 glBindVertexArray(_vaoFloor);
                                 glDrawElements(GL_TRIANGLES, _vaoIndicesFloor, GL_UNSIGNED_INT, 0);
+                                
+                            } else if (cell == GridCell::COIN) {
+                                _prg.setUniformValue("color", QVector3D(0.5f, 0.5f, 0.5f));
+                                glBindVertexArray(_vaoFloor);
+                                glDrawElements(GL_TRIANGLES, _vaoIndicesFloor, GL_UNSIGNED_INT, 0);
+                                modelMatrix.setToIdentity();
+                                modelMatrix.translate(x, 1.0f, y);
+                                modelMatrix.rotate(90.0f, 1.0f, 0.0f, 0.0f);
+                                modelMatrix.rotate(coinRotation, 0.0f, 0.0f, 1.0f);
+                                modelMatrix.scale(2.0f);
+                                modelViewMatrix = viewMatrix * modelMatrix;
+                                _prg.setUniformValue("modelview_matrix", modelViewMatrix);
+                                _prg.setUniformValue("view_matrix", viewMatrix);
+                                _prg.setUniformValue("normal_matrix", modelViewMatrix.normalMatrix());
+                                _prg.setUniformValue("color", QVector3D(1.0f, 1.0f, 0.0f));
+                                glBindVertexArray(_vaoCoin);
+                                glDrawElements(GL_TRIANGLES, _coinSize, GL_UNSIGNED_INT, 0);
+                            } else if (cell == GridCell::DOOR) {
+                                _prg.setUniformValue("color", QVector3D(0.0f, 0.0f, 1.0f));
+                                glBindVertexArray(_vaoWall);
+                                glDrawElements(GL_TRIANGLES, _vaoIndicesWall, GL_UNSIGNED_INT, 0);
                             }
                         }
                     }
@@ -624,6 +724,7 @@ void MazeApp::update(const QList<QVRObserver*>& observers)
     constexpr float hitbox = 0.1f;  // you are a 20 cm wide cylinder
     constexpr float sensitivity = 0.5f; // mouse sensitivity
     constexpr float wallRadius = 1.0f;
+    constexpr float coinSpeed = 100.0f;
     float seconds = 0.0f;
     if (_timer.isValid()) {
         seconds = _timer.nsecsElapsed() / 1e9f;
@@ -631,6 +732,7 @@ void MazeApp::update(const QList<QVRObserver*>& observers)
     } else {
         _timer.start();
     }
+    coinRotation += seconds * coinSpeed;
 
     auto deviceCount = QVRManager::deviceCount();
     auto observer = observers.at(0);    // only support one observer
@@ -668,23 +770,39 @@ void MazeApp::update(const QList<QVRObserver*>& observers)
         auto position = observer->navigationPosition();
         bool collision = false;
         position += posUpdate;
-        for (auto& object : renderQueue) {
-            if (object.type == GridCell::WALL) {
+        frontToBack(kdTreeRoot, position, [&](Node* node) {
+            if (!node->isLeaf) return false;
+            auto& object = node->data;
+            if (object.type == GridCell::WALL || object.type == GridCell::DOOR || object.type == GridCell::FINISH) {
                 auto wallCenter = object.position;
                 auto circleDistanceX = std::abs(position.x() - wallCenter.x);
                 auto circleDistanceY = std::abs(position.z() - wallCenter.y);
-                if (circleDistanceX > (wallRadius + hitbox)) continue;
-                if (circleDistanceY > (wallRadius + hitbox)) continue;
+                if (circleDistanceX > (wallRadius + hitbox)) return false;
+                if (circleDistanceY > (wallRadius + hitbox)) return false;
                 auto cornerDistance_sq = (circleDistanceX - wallRadius)*(circleDistanceX - wallRadius) +
                     (circleDistanceY - wallRadius)*(circleDistanceY - wallRadius);
                 if (circleDistanceX <= wallRadius || circleDistanceY <= wallRadius ||
                     cornerDistance_sq <= (hitbox*hitbox)) {
                     // handle collision
+                    if (object.type == GridCell::FINISH) {
+                        _wantExit = true;
+                        return true;
+                    }
                     collision = true;
-                    break;
+                    return true;
                 }
             }
-        }
+            if (object.type == GridCell::COIN) {
+                auto coinPos = object.position;
+                auto dist = (coinPos.x - position.x())*(coinPos.x - position.x()) + (coinPos.y - position.z())*(coinPos.y - position.z());
+                if (dist < (coinBoundingSphere + hitbox) * (coinBoundingSphere+hitbox)) {
+                    // collect coin
+                    object.type = GridCell::EMPTY;
+                    coinsLeft--;
+                }
+            }
+            return false;
+        });
         if (collision) {
             observer->setNavigation(observer->navigationPosition(), newOrientation);
         } else {
@@ -692,8 +810,16 @@ void MazeApp::update(const QList<QVRObserver*>& observers)
         }
     }
 
-    oldNavigationPosition = observer->navigationPosition();
-    oldTrackingPosition = observer->trackingPosition();
+    if (coinsLeft == 0) {
+        inOrder(kdTreeRoot, [](Node* node){
+            if (node->isLeaf) {
+                if (node->data.type == GridCell::DOOR) {
+                    node->data.type = GridCell::EMPTY;
+                }
+            }
+        });
+    }
+
     mouseDx = QVector2D(0.0f, 0.0f);
 }
 

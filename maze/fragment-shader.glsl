@@ -31,8 +31,9 @@ in vec3 vlight;
 
 layout(location = 0) out vec4 fcolor;
 
+const float ka = 0.4;
 const float kd = 0.9;
-const float ks = 0.01;
+const float ks = 0.1;
 const float shininess = 120.0;
 
 void main(void)
@@ -47,5 +48,5 @@ void main(void)
 
     float specular = ks * pow(max(dot(h, n), 0.0), shininess);
 
-    fcolor = vec4(color * vec3(0.2 + diffuse + specular), 1.0);
+    fcolor = vec4(color * vec3(ka + diffuse + specular), 1.0);
 }
