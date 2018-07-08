@@ -232,6 +232,7 @@ private:
     unsigned int _vaoIndicesWall;   // Number of indices to render for the box
     unsigned int _vaoFloor;
     unsigned int _vaoIndicesFloor;
+    unsigned int _vaoCoin;
     QOpenGLShaderProgram _prg;  // Shader program for rendering
     GridCell* mazeGrid;    // 0 = nothing, 1 = wall, 2 = finish, (3 = spawn)
     size_t gridWidth;
@@ -241,13 +242,18 @@ private:
     bool occlusionCulling = false; 
     bool chcDebug = false;
     int debugLevel = 0;
+    bool forwardPressed = false;
+    bool leftPressed = false;
+    bool rightPressed = false;
+    bool backwardPressed = false;
+    QPoint mousePosLastFrame;
+    QVector2D mouseDx;
+    QVector3D oldNavigationPosition;
+    QVector3D oldTrackingPosition;
     std::vector<RenderObject> renderQueue;
     std::vector<OcclusionQuery*> vQueries;
     std::vector<OcclusionQuery*> iQueries;
     Node* kdTreeRoot;
-
-    /* Dynamic data for rendering. Needs to be serialized. */
-    float _rotationAngle;       // animated box rotation
 
 public:
     MazeApp();
@@ -265,6 +271,11 @@ public:
     void deserializeDynamicData(QDataStream& ds) override;
 
     void keyPressEvent(const QVRRenderContext& context, QKeyEvent* event) override;
+    void keyReleaseEvent(const QVRRenderContext& context, QKeyEvent* event) override;
+    void deviceButtonPressEvent(QVRDeviceEvent* event) override;
+    void deviceButtonReleaseEvent(QVRDeviceEvent* event) override;
+    void deviceAnalogChangeEvent(QVRDeviceEvent* event) override;
+    void mouseMoveEvent(const QVRRenderContext& context, QMouseEvent* event) override;
 
     void exitProcess(QVRProcess* p) override;
 

@@ -7,16 +7,20 @@
 
 #include <qvr/manager.hpp>
 #include <qvr/window.hpp>
+#include <qvr/observer.hpp>
+#include <qvr/device.hpp>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
+
+#define TINYOBJLOADER_IMPLEMENTATION
+#include "tiny_obj_loader.h"
 
 #include "MazeApp.hpp"
 
 
 MazeApp::MazeApp() :
-    _wantExit(false),
-    _rotationAngle(0.0f)
+    _wantExit(false)
 {
     _timer.start();
 }
@@ -162,12 +166,68 @@ bool MazeApp::initProcess(QVRProcess* p)
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(floorIndices), floorIndices, GL_STATIC_DRAW);
     _vaoIndicesFloor = 6;
 
+    std::string inputfile = "goldCoin.obj";
+    tinyobj::attrib_t attrib;
+    std::vector<tinyobj::shape_t> shapes;
+    std::vector<tinyobj::material_t> materials;
+
+    std::string err;
+    bool ret = tinyobj::LoadObj(&attrib, &shapes, &materials, &err, inputfile.c_str());
+    if (!err.empty()) {
+        std::cerr << err << std::endl;
+    }
+
+    if (!ret) {
+        __debugbreak();
+    }
+
+    std::vector<float> vertices;
+    std::vector<float> normals;
+
+    for (size_t s = 0; s < shapes.size(); s++) {
+        size_t index_offset = 0;
+        for (size_t f = 0; f < shapes[s].mesh.num_face_vertices.size(); f++) {
+            int fv = shapes[s].mesh.num_face_vertices[f];
+
+            for (size_t v = 0; v < fv; v++) {
+                tinyobj::index_t idx = shapes[s].mesh.indices[index_offset + v];
+                tinyobj::real_t vx = attrib.vertices[3 * idx.vertex_index + 0];
+                tinyobj::real_t vy = attrib.vertices[3 * idx.vertex_index + 1];
+                tinyobj::real_t vz = attrib.vertices[3 * idx.vertex_index + 2];
+                tinyobj::real_t nx = attrib.vertices[3 * idx.normal_index + 0];
+                tinyobj::real_t ny = attrib.vertices[3 * idx.normal_index + 1];
+                tinyobj::real_t nz = attrib.vertices[3 * idx.normal_index + 2];
+
+                vertices.push_back(vx);
+                vertices.push_back(vy);
+                vertices.push_back(vz);
+                normals.push_back(nx);
+                normals.push_back(ny);
+                normals.push_back(nz);
+            }
+        }
+    }
+
+    glGenVertexArrays(1, &_vaoCoin);
+    glBindVertexArray(_vaoCoin);
+    GLuint coinPosBuffer;
+    glGenBuffers(1, &coinPosBuffer);
+    glBindBuffer(GL_ARRAY_BUFFER, coinPosBuffer);
+    glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float), vertices.data(), GL_STATIC_DRAW);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, 0);
+    glEnableVertexAttribArray(0);
+    GLuint coinNormalBuffer;
+    glGenBuffers(1, &coinNormalBuffer);
+    glBindBuffer(GL_ARRAY_BUFFER, coinNormalBuffer);
+
     // Shader program
     _prg.addShaderFromSourceFile(QOpenGLShader::Vertex, ":vertex-shader.glsl");
     _prg.addShaderFromSourceFile(QOpenGLShader::Fragment, ":fragment-shader.glsl");
     if (!_prg.link()) {
         qCritical("Could not link program! Check shaders!");
     }
+
+    mousePosLastFrame = QCursor::pos();
 
     return true;
 }
@@ -373,6 +433,7 @@ void MazeApp::render(QVRWindow*  w ,
                         iQueries.push_back(query);
                         return true;
                     }
+                    return false;
                 });
 
                 while (!iQueries.empty()) {
@@ -559,8 +620,81 @@ void MazeApp::render(QVRWindow*  w ,
 
 void MazeApp::update(const QList<QVRObserver*>& observers)
 {
-    float seconds = _timer.elapsed() / 1000.0f;
-    _rotationAngle = seconds * 20.0f;
+    constexpr float runSpeed = 3.5f;
+    constexpr float hitbox = 0.1f;  // you are a 20 cm wide cylinder
+    constexpr float sensitivity = 0.5f; // mouse sensitivity
+    constexpr float wallRadius = 1.0f;
+    float seconds = 0.0f;
+    if (_timer.isValid()) {
+        seconds = _timer.nsecsElapsed() / 1e9f;
+        _timer.restart();
+    } else {
+        _timer.start();
+    }
+
+    auto deviceCount = QVRManager::deviceCount();
+    auto observer = observers.at(0);    // only support one observer
+    if (observer->config().navigationType() == QVRNavigationType::QVR_Navigation_Custom) {
+        QVector3D posUpdate;
+        auto orientation = observer->navigationOrientation();
+        float pitch, yaw, roll;
+        orientation.getEulerAngles(&pitch, &yaw, &roll);
+        QVector3D forward = QQuaternion::fromEulerAngles(0, yaw, roll) * QVector3D(0.0f, 0.0f, -1.0f);
+        QVector3D right = QQuaternion::fromEulerAngles(0, yaw, roll) * QVector3D(1.0f, 0.0f, 0.0f);
+
+        if (forwardPressed) {
+            posUpdate += runSpeed * seconds * forward;
+        }
+        if (backwardPressed) {
+            posUpdate -= runSpeed * seconds * forward;
+        }
+        if (rightPressed) {
+            posUpdate += runSpeed * seconds * right;
+        }
+        if (leftPressed) {
+            posUpdate -= runSpeed * seconds * right;
+        }
+        
+        yaw += mouseDx.x()*sensitivity;
+        pitch += mouseDx.y()*sensitivity;
+        if (pitch > 89.0f) {
+            pitch = 89.0f;
+        }
+        if (pitch < -89.0f) {
+            pitch = -89.0f;
+        }
+        auto newOrientation = QQuaternion::fromEulerAngles(pitch, yaw, roll);
+
+        auto position = observer->navigationPosition();
+        bool collision = false;
+        position += posUpdate;
+        for (auto& object : renderQueue) {
+            if (object.type == GridCell::WALL) {
+                auto wallCenter = object.position;
+                auto circleDistanceX = std::abs(position.x() - wallCenter.x);
+                auto circleDistanceY = std::abs(position.z() - wallCenter.y);
+                if (circleDistanceX > (wallRadius + hitbox)) continue;
+                if (circleDistanceY > (wallRadius + hitbox)) continue;
+                auto cornerDistance_sq = (circleDistanceX - wallRadius)*(circleDistanceX - wallRadius) +
+                    (circleDistanceY - wallRadius)*(circleDistanceY - wallRadius);
+                if (circleDistanceX <= wallRadius || circleDistanceY <= wallRadius ||
+                    cornerDistance_sq <= (hitbox*hitbox)) {
+                    // handle collision
+                    collision = true;
+                    break;
+                }
+            }
+        }
+        if (collision) {
+            observer->setNavigation(observer->navigationPosition(), newOrientation);
+        } else {
+            observer->setNavigation(position, newOrientation);
+        }
+    }
+
+    oldNavigationPosition = observer->navigationPosition();
+    oldTrackingPosition = observer->trackingPosition();
+    mouseDx = QVector2D(0.0f, 0.0f);
 }
 
 bool MazeApp::wantExit()
@@ -570,12 +704,10 @@ bool MazeApp::wantExit()
 
 void MazeApp::serializeDynamicData(QDataStream& ds) const
 {
-    ds << _rotationAngle;
 }
 
 void MazeApp::deserializeDynamicData(QDataStream& ds)
 {
-    ds >> _rotationAngle;
 }
 
 void MazeApp::keyPressEvent(const QVRRenderContext& /* context */, QKeyEvent* event)
@@ -584,6 +716,18 @@ void MazeApp::keyPressEvent(const QVRRenderContext& /* context */, QKeyEvent* ev
     {
     case Qt::Key_Escape:
         _wantExit = true;
+        break;
+    case Qt::Key_W:
+        forwardPressed = true;
+        break;
+    case Qt::Key_S:
+        backwardPressed = true;
+        break;
+    case Qt::Key_A:
+        leftPressed = true;
+        break;
+    case Qt::Key_D:
+        rightPressed = true;
         break;
     case Qt::Key_P:
         if (occlusionCulling) occlusionCulling = false;
@@ -629,6 +773,74 @@ void MazeApp::keyPressEvent(const QVRRenderContext& /* context */, QKeyEvent* ev
     if (event->key() == Qt::Key_0) {
         debugLevel = 10;
         chcDebug = true;
+    }
+}
+
+void MazeApp::keyReleaseEvent(const QVRRenderContext& context, QKeyEvent* event)
+{
+    switch (event->key()) {
+    case Qt::Key_W:
+        forwardPressed = false;
+        break;
+    case Qt::Key_S:
+        backwardPressed = false;
+        break;
+    case Qt::Key_A:
+        leftPressed = false;
+        break;
+    case Qt::Key_D:
+        rightPressed = false;
+        break;
+    }
+}
+void MazeApp::deviceButtonPressEvent(QVRDeviceEvent* event)
+{
+    switch (event->button()) {
+    case QVRButton::QVR_Button_Up:
+        forwardPressed = true;
+    case QVRButton::QVR_Button_Left:
+        leftPressed = true;
+    case QVRButton::QVR_Button_Right:
+        rightPressed = true;
+    case QVRButton::QVR_Button_Down:
+        backwardPressed = true;
+    }
+}
+
+void MazeApp::deviceButtonReleaseEvent(QVRDeviceEvent* event)
+{
+    switch (event->button()) {
+    case QVRButton::QVR_Button_Up:
+        forwardPressed = false;
+    case QVRButton::QVR_Button_Left:
+        leftPressed = false;
+    case QVRButton::QVR_Button_Right:
+        rightPressed = false;
+    case QVRButton::QVR_Button_Down:
+        backwardPressed = false;
+    }
+}
+
+void MazeApp::mouseMoveEvent(const QVRRenderContext& context, QMouseEvent* event)
+{
+    QPoint mousePos = event->globalPos();
+    mouseDx = QVector2D(mousePosLastFrame.x() - mousePos.x(), mousePosLastFrame.y() - mousePos.y());
+    mousePosLastFrame = mousePos;
+}
+
+void MazeApp::deviceAnalogChangeEvent(QVRDeviceEvent* event)
+{
+    constexpr float multiplier = 30.0f;
+    auto analog = event->analog();
+    if (analog == QVRAnalog::QVR_Analog_Axis_X) {
+        auto device = event->device();
+        float value = device.analogValue(device.analogIndex(analog));
+        mouseDx.setX(value * multiplier);
+    }
+    if (analog == QVRAnalog::QVR_Analog_Axis_Y) {
+        auto device = event->device();
+        float value = device.analogValue(device.analogIndex(analog));
+        mouseDx.setY(value * multiplier);
     }
 }
 
