@@ -328,6 +328,10 @@ void MazeApp::render(QVRWindow*  w ,
                         _prg.setUniformValue("color", QVector3D(1.0f, 1.0f, 0.0f));
                         glBindVertexArray(_vaoCoin);
                         glDrawElements(GL_TRIANGLES, _coinSize, GL_UNSIGNED_INT, 0);
+                    } else if (cell == GridCell::DOOR) {
+                        _prg.setUniformValue("color", QVector3D(0.0f, 0.0f, 1.0f));
+                        glBindVertexArray(_vaoWall);
+                        glDrawElements(GL_TRIANGLES, _vaoIndicesWall, GL_UNSIGNED_INT, 0);
                     }
                 }
 
