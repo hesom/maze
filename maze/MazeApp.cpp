@@ -355,6 +355,19 @@ void MazeApp::render(QVRWindow*  w ,
                     glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
                 }
             });
+
+            // Render player dot
+            
+            QMatrix4x4 modelMatrix;
+            modelMatrix.translate(playerPosition.x(), 1.0f, playerPosition.z());
+            modelMatrix.scale(8.0f);
+            QMatrix4x4 modelViewMatrix = viewMatrix * modelMatrix;
+            _prg.setUniformValue("modelview_matrix", modelViewMatrix);
+            _prg.setUniformValue("view_matrix", viewMatrix);
+            _prg.setUniformValue("normal_matrix", modelViewMatrix.normalMatrix());
+            _prg.setUniformValue("color", QVector3D(1.0f, 1.0f, 1.0f));
+            glBindVertexArray(_vaoCoin);
+            glDrawElements(GL_TRIANGLES, _coinSize, GL_UNSIGNED_INT, 0);
         } else {
             projectionMatrix = context.frustum(view).toMatrix4x4();
             _prg.setUniformValue("projection_matrix", projectionMatrix);
@@ -827,6 +840,7 @@ void MazeApp::update(const QList<QVRObserver*>& observers)
         });
     }
 
+    playerPosition = observer->navigationPosition() + observer->trackingPosition();
     mouseDx = QVector2D(0.0f, 0.0f);
 }
 

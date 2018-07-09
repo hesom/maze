@@ -254,6 +254,7 @@ private:
     bool backwardPressed = false;
     QPoint mousePosLastFrame;
     QVector2D mouseDx;
+    QVector3D playerPosition;
     std::vector<RenderObject> renderQueue;
     std::vector<OcclusionQuery*> vQueries;
     std::vector<OcclusionQuery*> iQueries;
