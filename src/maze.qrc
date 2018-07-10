@@ -4,5 +4,6 @@
         <file>fragment-shader.glsl</file>
         <file>config.qvr</file>
         <file>maze.bmp</file>
+        <file>goldCoin.wavefront</file>
     </qresource>
 </RCC>
