@@ -265,23 +265,23 @@ void MazeApp::render(QVRWindow*  w ,
                 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
         glBindFramebuffer(GL_FRAMEBUFFER, _fbo);
         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, textures[view], 0);
-        glViewport(0, 0, width, height);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         QMatrix4x4 projectionMatrix;
         QMatrix4x4 viewMatrix;
-        QVector3D eye = context.navigationPosition();
+        QVector3D eye = context.navigationPosition() + context.trackingPosition(view);
 
         glUseProgram(_prg.programId());
 
         if (w->id() == "debug") {
+            glViewport(0, 0, width, height);
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
             projectionMatrix.ortho(-40.0f, 40.0f, -40.0f, 40.0f, 0.1f, 100.0f);
             _prg.setUniformValue("projection_matrix", projectionMatrix);
             viewMatrix.lookAt(QVector3D(0.0f, 10.0f, 0.0f), QVector3D(0.0f, 0.0f, 0.0f), QVector3D(-1.0f, 0.0f, 0.0f));
             glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
             glDepthMask(GL_TRUE);
             glEnable(GL_DEPTH_TEST);
-            glDisable(GL_CULL_FACE);
+            //glEnable(GL_CULL_FACE);
             inOrder(kdTreeRoot, [&](Node* node) {
                 if (node->renderedThisFrame) {
                     // immediately render
@@ -297,7 +297,7 @@ void MazeApp::render(QVRWindow*  w ,
 
                     glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
                     glDepthMask(GL_TRUE);
-                    glEnable(GL_DEPTH_TEST);
+                    //glEnable(GL_DEPTH_TEST);
                     if (cell == GridCell::WALL) {
                         _prg.setUniformValue("color", QVector3D(1.0f, 0.0f, 0.0f));
                         glBindVertexArray(_vaoWall);
@@ -392,13 +392,16 @@ void MazeApp::render(QVRWindow*  w ,
                     vQueries.at(i)->getNode()->visible = false;
                     pullUp(vQueries.at(i)->getNode());
                     inOrder(vQueries.at(i)->getNode(), [](Node* node) {
-                        node->visible = false;
+                        //node->visible = false;
                     });
                 }
                 delete vQueries.at(i);
-                vQueries.erase(vQueries.begin() + i);
             }
+            vQueries.clear();
 
+            glViewport(0, 0, width, height);
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+            
             // frustum culling
             const QVRFrustum& frustum = context.frustum(view);
             QVector3D nTop = QVector3D(0.0f, frustum.nearPlane(), frustum.topPlane()).normalized();
@@ -457,6 +460,7 @@ void MazeApp::render(QVRWindow*  w ,
                         glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
                         glDepthMask(GL_TRUE);
                         glEnable(GL_DEPTH_TEST);
+                        //glEnable(GL_CULL_FACE);
                         if (cell == GridCell::WALL) {
                             _prg.setUniformValue("color", QVector3D(1.0f, 0.0f, 0.0f));
                             glBindVertexArray(_vaoWall);
@@ -507,6 +511,7 @@ void MazeApp::render(QVRWindow*  w ,
                 });
 
                 while (!iQueries.empty()) {
+                    std::vector<OcclusionQuery*> newQueries;
                     for (auto it = iQueries.begin(); it < iQueries.end();) {
                         if ((*it)->isAvailable()) { // available?
                             if ((*it)->getResult()) {   // visible?
@@ -525,7 +530,7 @@ void MazeApp::render(QVRWindow*  w ,
                                     glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
                                     glDepthMask(GL_TRUE);
                                     glEnable(GL_DEPTH_TEST);
-                                    glEnable(GL_CULL_FACE);
+                                    //glEnable(GL_CULL_FACE);
                                     if (cell == GridCell::WALL) {
                                         _prg.setUniformValue("color", QVector3D(1.0f, 0.0f, 0.0f));
                                         glBindVertexArray(_vaoWall);
@@ -565,8 +570,6 @@ void MazeApp::render(QVRWindow*  w ,
                                     }
                                     node->renderedThisFrame = true;
                                     (*it)->getNode()->visible = true;
-                                    delete (*it);
-                                    it = iQueries.erase(it);
                                 } else {
                                     Node* node =(*it)->getNode();
                                     OcclusionQuery* queryLeft = new OcclusionQuery(node->left);
@@ -574,10 +577,8 @@ void MazeApp::render(QVRWindow*  w ,
                                     node->visible = true;
                                     queryLeft->start(projectionMatrix, viewMatrix);
                                     queryRight->start(projectionMatrix, viewMatrix);
-                                    iQueries.push_back(queryLeft);
-                                    iQueries.push_back(queryRight);
-                                    delete (*it);
-                                    it = iQueries.erase(it);
+                                    newQueries.push_back(queryLeft);
+                                    newQueries.push_back(queryRight);
                                 }
 
                             } else {    // not visible
@@ -587,13 +588,14 @@ void MazeApp::render(QVRWindow*  w ,
                                 inOrder(node, [](Node* node) {
                                     node->visible = false;
                                 });
-                                delete (*it);
-                                it = iQueries.erase(it);
                             }
+                            delete (*it);
+                            it = iQueries.erase(it);
                         } else {    // not available yet
                             it++;
                         }
                     }   // end query loop
+                    iQueries.insert(iQueries.end(), newQueries.begin(), newQueries.end());
                 }   // end not empty while loop
             } else if (occlusionCulling) {
                 frontToBack(kdTreeRoot, eye, [&](Node* node) {
@@ -607,7 +609,7 @@ void MazeApp::render(QVRWindow*  w ,
                         
                         glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
                         glDepthMask(GL_FALSE);
-                        glEnable(GL_CULL_FACE);
+                        //glEnable(GL_CULL_FACE);
                         QMatrix4x4 modelMatrix;
                         modelMatrix.translate(x, 1.0f, y);
                         QMatrix4x4 modelViewMatrix = viewMatrix * modelMatrix;
@@ -675,7 +677,10 @@ void MazeApp::render(QVRWindow*  w ,
             } else {
                 frontToBack(kdTreeRoot, eye, [&](Node* root){
                     if (root->isLeaf) {
-                        glEnable(GL_CULL_FACE);
+                        glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+                        glDepthMask(GL_TRUE);
+                        glEnable(GL_DEPTH_TEST);
+                        //glEnable(GL_CULL_FACE);
                         auto cell = root->data.type;
                         float x = root->data.position.x;
                         float y = root->data.position.y;
@@ -1049,7 +1054,7 @@ Node* kdTree(std::vector<RenderObject>& objects, int depth)
     root->axis = axis;
     root->depth = depth;
     root->isLeaf = false;
-    root->visible = false;
+    root->visible = true;
     if (objects.size() % 2 != 0) {
         if (axis == 0) {
             root->border = median.position.x;

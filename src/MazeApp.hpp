@@ -131,11 +131,11 @@ public:
 
     void start(const QMatrix4x4& projectionMatrix, const QMatrix4x4& viewMatrix)
     {
-        glBeginQuery(GL_ANY_SAMPLES_PASSED_CONSERVATIVE, queryId);
+        glBeginQuery(GL_ANY_SAMPLES_PASSED, queryId);
         glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
         //glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
         glDepthMask(GL_FALSE);
-        glDisable(GL_CULL_FACE);
+        //glEnable(GL_CULL_FACE);
         glBindVertexArray(vao);
         glUseProgram(prg.programId());
         QMatrix4x4 modelMatrix;
@@ -156,7 +156,7 @@ public:
         prg.setUniformValue("normal_matrix", modelViewMatrix.normalMatrix());
         prg.setUniformValue("color", QVector3D(0.0f, 1.0f, 0.0f));
         glDrawElements(GL_TRIANGLES, vaoIndices, GL_UNSIGNED_INT, 0);
-        glEndQuery(GL_ANY_SAMPLES_PASSED_CONSERVATIVE);
+        glEndQuery(GL_ANY_SAMPLES_PASSED);
         //glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     }
 
