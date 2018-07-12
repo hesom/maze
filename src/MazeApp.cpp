@@ -748,6 +748,7 @@ void MazeApp::update(const QList<QVRObserver*>& observers)
     constexpr float sensitivity = 0.5f; // mouse sensitivity
     constexpr float wallRadius = 1.0f;
     constexpr float coinSpeed = 100.0f;
+    static float timeInWall = 0.0f;
     float seconds = 0.0f;
     if (_timer.isValid()) {
         seconds = _timer.nsecsElapsed() / 1e9f;
@@ -790,9 +791,11 @@ void MazeApp::update(const QList<QVRObserver*>& observers)
         }
         auto newOrientation = QQuaternion::fromEulerAngles(pitch, yaw, roll);
 
-        auto position = observer->navigationPosition();
+        auto navigationPosition = observer->navigationPosition();
+        auto position = navigationPosition + observer->trackingPosition();
         bool collision = false;
         position += posUpdate;
+        navigationPosition += posUpdate;
         frontToBack(kdTreeRoot, position, [&](Node* node) {
             if (!node->isLeaf) return false;
             auto& object = node->data;
@@ -835,7 +838,65 @@ void MazeApp::update(const QList<QVRObserver*>& observers)
         if (collision) {
             observer->setNavigation(observer->navigationPosition(), newOrientation);
         } else {
-            observer->setNavigation(position, newOrientation);
+            observer->setNavigation(navigationPosition, newOrientation);
+        }
+    } else {
+        auto navigationPosition = observer->navigationPosition();
+        auto position = navigationPosition + observer->trackingPosition();
+        bool collision = false;
+        frontToBack(kdTreeRoot, position, [&](Node* node) {
+            if (!node->isLeaf) return false;
+            auto& object = node->data;
+            if (object.type == GridCell::WALL || object.type == GridCell::DOOR || object.type == GridCell::FINISH) {
+                auto wallCenter = object.position;
+                auto circleDistanceX = std::abs(position.x() - wallCenter.x);
+                auto circleDistanceY = std::abs(position.z() - wallCenter.y);
+                if (circleDistanceX > (wallRadius + hitbox)) return false;
+                if (circleDistanceY > (wallRadius + hitbox)) return false;
+                auto cornerDistance_sq = (circleDistanceX - wallRadius)*(circleDistanceX - wallRadius) +
+                    (circleDistanceY - wallRadius)*(circleDistanceY - wallRadius);
+                if (circleDistanceX <= wallRadius || circleDistanceY <= wallRadius ||
+                    cornerDistance_sq <= (hitbox*hitbox)) {
+                    // handle collision
+                    if (object.type == GridCell::FINISH) {
+                        _wantExit = true;
+                        return true;
+                    }
+                    collision = true;
+                    return true;
+                }
+            }
+            if (object.type == GridCell::COIN) {
+                auto coinPos = object.position;
+                auto dist = (coinPos.x - position.x())*(coinPos.x - position.x()) + (coinPos.y - position.z())*(coinPos.y - position.z());
+                if (dist < (coinBoundingSphere + collectionRange) * (coinBoundingSphere + collectionRange)) {
+                    // collect coin
+                    object.type = GridCell::EMPTY;
+                    coinsLeft--;
+                    for (int i = 0; i < deviceCount; i++) {
+                        auto device = QVRManager::device(i);
+                        if (device.supportsHapticPulse()) {
+                            device.triggerHapticPulse(1000);
+                        }
+                    }
+                }
+            }
+            return false;
+        });
+        if (collision) {
+            timeInWall += seconds;
+            for (int i = 0; i < deviceCount; i++) {
+                auto device = QVRManager::device(i);
+                if (device.supportsHapticPulse()) {
+                    device.triggerHapticPulse(1000);
+                }
+            }
+        } else {
+            timeInWall = 0.0f;
+        }
+
+        if (timeInWall > 1.0f) {
+            _wantExit = true;
         }
     }
 
