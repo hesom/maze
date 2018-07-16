@@ -742,7 +742,7 @@ void MazeApp::render(QVRWindow*  w ,
 
 void MazeApp::update(const QList<QVRObserver*>& observers)
 {
-    constexpr float runSpeed = 5.0f;
+    float runSpeed = 5.0f;
     constexpr float hitbox = 0.1f;  // you are a 20 cm wide cylinder
     constexpr float collectionRange = 0.3f;
     constexpr float sensitivity = 0.5f; // mouse sensitivity
@@ -760,9 +760,17 @@ void MazeApp::update(const QList<QVRObserver*>& observers)
 
     auto deviceCount = QVRManager::deviceCount();
     auto observer = observers.at(0);    // only support one observer
+	if (observer->config().trackingType() == QVRTrackingType::QVR_Tracking_Device) {
+		runSpeed = 2.0f;
+	}
+
     if (observer->config().navigationType() == QVRNavigationType::QVR_Navigation_Custom) {
         QVector3D posUpdate;
-        auto orientation = observer->navigationOrientation();
+        auto orientation = observer->trackingOrientation();
+		if (observer->config().trackingType() == QVRTrackingType::QVR_Tracking_Stationary) {
+			orientation = observer->navigationOrientation();
+		}
+
         float pitch, yaw, roll;
         orientation.getEulerAngles(&pitch, &yaw, &roll);
         QVector3D forward = QQuaternion::fromEulerAngles(0, yaw, roll) * QVector3D(0.0f, 0.0f, -1.0f);
@@ -790,6 +798,10 @@ void MazeApp::update(const QList<QVRObserver*>& observers)
             pitch = -89.0f;
         }
         auto newOrientation = QQuaternion::fromEulerAngles(pitch, yaw, roll);
+
+		if (observer->config().trackingType() != QVR_Tracking_Stationary) {
+			newOrientation = observer->navigationOrientation();
+		}
 
         auto navigationPosition = observer->navigationPosition();
         auto position = navigationPosition + observer->trackingPosition();
@@ -825,12 +837,12 @@ void MazeApp::update(const QList<QVRObserver*>& observers)
                     // collect coin
                     object.type = GridCell::EMPTY;
                     coinsLeft--;
-                    for (int i = 0; i < deviceCount; i++) {
-                        auto device = QVRManager::device(i);
-                        if (device.supportsHapticPulse()) {
-                            device.triggerHapticPulse(1000);
-                        }
-                    }
+                    //for (int i = 0; i < deviceCount; i++) {
+                    //    auto device = QVRManager::device(i);
+                    //    if (device.supportsHapticPulse()) {
+                    //        device.triggerHapticPulse(1000);
+                    //    }
+                    //}
                 }
             }
             return false;
@@ -873,24 +885,24 @@ void MazeApp::update(const QList<QVRObserver*>& observers)
                     // collect coin
                     object.type = GridCell::EMPTY;
                     coinsLeft--;
-                    for (int i = 0; i < deviceCount; i++) {
-                        auto device = QVRManager::device(i);
-                        if (device.supportsHapticPulse()) {
-                            device.triggerHapticPulse(1000);
-                        }
-                    }
+                    //for (int i = 0; i < deviceCount; i++) {
+                    //    auto device = QVRManager::device(i);
+                    //    if (device.supportsHapticPulse()) {
+                    //        device.triggerHapticPulse(1000);
+                    //    }
+                    //}
                 }
             }
             return false;
         });
         if (collision) {
             timeInWall += seconds;
-            for (int i = 0; i < deviceCount; i++) {
-                auto device = QVRManager::device(i);
-                if (device.supportsHapticPulse()) {
-                    device.triggerHapticPulse(1000);
-                }
-            }
+            //for (int i = 0; i < deviceCount; i++) {
+            //    auto device = QVRManager::device(i);
+            //    if (device.supportsHapticPulse()) {
+            //        device.triggerHapticPulse(1000);
+            //    }
+            //}
         } else {
             timeInWall = 0.0f;
         }
@@ -1015,12 +1027,16 @@ void MazeApp::deviceButtonPressEvent(QVRDeviceEvent* event)
     switch (event->button()) {
     case QVRButton::QVR_Button_Up:
         forwardPressed = true;
+		break;
     case QVRButton::QVR_Button_Left:
         leftPressed = true;
+		break;
     case QVRButton::QVR_Button_Right:
         rightPressed = true;
+		break;
     case QVRButton::QVR_Button_Down:
         backwardPressed = true;
+		break;
     }
 }
 
@@ -1029,12 +1045,16 @@ void MazeApp::deviceButtonReleaseEvent(QVRDeviceEvent* event)
     switch (event->button()) {
     case QVRButton::QVR_Button_Up:
         forwardPressed = false;
+		break;
     case QVRButton::QVR_Button_Left:
         leftPressed = false;
+		break;
     case QVRButton::QVR_Button_Right:
         rightPressed = false;
+		break;
     case QVRButton::QVR_Button_Down:
         backwardPressed = false;
+		break;
     }
 }
 
@@ -1047,7 +1067,7 @@ void MazeApp::mouseMoveEvent(const QVRRenderContext& context, QMouseEvent* event
 
 void MazeApp::deviceAnalogChangeEvent(QVRDeviceEvent* event)
 {
-    constexpr float multiplier = 30.0f;
+    /*constexpr float multiplier = 1.0f;
     auto analog = event->analog();
     if (analog == QVRAnalog::QVR_Analog_Axis_X) {
         auto device = event->device();
@@ -1058,7 +1078,7 @@ void MazeApp::deviceAnalogChangeEvent(QVRDeviceEvent* event)
         auto device = event->device();
         float value = device.analogValue(device.analogIndex(analog));
         mouseDx.setY(value * multiplier);
-    }
+    }*/
 }
 
 void MazeApp::exitProcess(QVRProcess* process)

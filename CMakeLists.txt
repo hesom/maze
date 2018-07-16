@@ -17,8 +17,6 @@ if(CMAKE_COMPILER_IS_GNUCXX)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=gnu++11 -Wall -Wextra")
 endif()
 
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
-
 find_package(Qt5Widgets REQUIRED)
 find_package(QVR REQUIRED)
 
@@ -34,7 +32,6 @@ target_link_libraries(maze ${QVR_LIBRARIES} Qt5::Widgets)
 
 configure_file(src/maze.bmp ${CMAKE_BINARY_DIR}/maze.bmp COPYONLY)
 configure_file(src/goldCoin.wavefront ${CMAKE_BINARY_DIR}/goldCoin.wavefront COPYONLY)
-configure_file(external/bin/qvr.dll ${CMAKE_BINARY_DIR}/qvr.dll COPYONLY)
 configure_file(src/config.qvr ${CMAKE_BINARY_DIR}/config.qvr)
 
 install(TARGETS maze RUNTIME DESTINATION bin)
